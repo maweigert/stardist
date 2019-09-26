@@ -38,7 +38,11 @@ matrix:
 
 install: 
   - pip install $TENSORFLOW $KERAS
-  - pip install .
+  - if [ $ONLY_INSTALL == true ]; then
+       pip install stardist;
+    else
+       pip install .;
+    fi;
 
 script:
    - echo `which gcc`
