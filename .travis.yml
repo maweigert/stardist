@@ -13,9 +13,8 @@ branches:
     - dev
 
 env:
-  global:
-    - TENSORFLOW='tensorflow' KERAS='keras' ONLY_INSTALL=false
-    
+  - TENSORFLOW='tensorflow' KERAS='keras' ONLY_INSTALL=false
+
 matrix:
   include:
     - os: linux
