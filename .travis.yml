@@ -50,4 +50,3 @@ script:
         echo "huhu";
         # pytest -v -s --durations=50 -m "not gpu";
     fi;
-	
