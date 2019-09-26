@@ -45,7 +45,5 @@ install:
     fi;
 
 script:
-  - if [ $ONLY_INSTALL == false ]; then
-        echo "huhu";
-        # pytest -v -s --durations=50 -m "not gpu";
-    fi;
+   - echo `which gcc`
+   #- pytest -v -s --durations=50 -m "not gpu"
