@@ -13,28 +13,19 @@ branches:
     - dev
 
 env:
-  - TENSORFLOW='tensorflow' KERAS='keras' ONLY_INSTALL=false
+  global:
+    - TENSORFLOW='tensorflow' KERAS='keras'
+  matrix:
+    - ONLY_INSTALL=false
+    - ONLY_INSTALL=true
 
+os:
+  - linux
 
-matrix:
-  include:
-    - os: linux
-      python: 3.7
-      dist: xenial
-    - os: linux
-      python: 3.5
-    - os: linux
-      python: 3.6
-    - os: linux
-      python: 3.7
-      dist: xenial
-      env: ONLY_INSTALL=true
-    - os: linux
-      python: 3.5
-      env: ONLY_INSTALL=true
-    - os: linux
-      python: 3.6
-      env: ONLY_INSTALL=true
+python:
+  - python 3.5
+  - python 3.6
+  - python 3.7
 
 install: 
   - pip install $TENSORFLOW $KERAS
