@@ -29,7 +29,7 @@ matrix:
 install:
   - pip install $TENSORFLOW $KERAS
   - if [ -z $ONLY_INSTALL ]; then
-       pip install .;
+       pip install -v .;
     else
        pip install stardist;
     fi;

@@ -53,7 +53,7 @@ qhull_src = sorted(glob(path.join(qhull_root, '*', '*.c*')))[::-1]
 common_inc = path.join(_dir, 'stardist', 'lib')
 common_src = ['stardist/lib/utils.cpp']
 
-print("++__++"*100)
+print("XXX"*300)
 print(_dir)
 print(common_inc)
 
