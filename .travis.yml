@@ -27,7 +27,8 @@ matrix:
       env: TENSORFLOW='tensorflow<2' KERAS='keras' ONLY_INSTALL=1
 
 install:
-  - pip install .;
+  - pip install $TENSORFLOW $KERAS
+  - pip install -v .;
 
 script:
   - if [ -z $ONLY_INSTALL ]; then
