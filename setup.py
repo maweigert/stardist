@@ -77,7 +77,7 @@ setup(
             'stardist.lib.stardist2d',
             sources=['stardist/lib/stardist2d.cpp','stardist/lib/clipper.cpp'] + common_src,
             extra_compile_args = ['-std=c++11'],
-            include_dirs=get_numpy_include_dirs()+[common_inc]+["stardist/lib"],
+            include_dirs=get_numpy_include_dirs()+[common_inc],
         ),
         Extension(
             'stardist.lib.stardist3d',
