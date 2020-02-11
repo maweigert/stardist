@@ -27,11 +27,7 @@ matrix:
       env: TENSORFLOW='tensorflow<2' KERAS='keras' ONLY_INSTALL=1
 
 install:
-  - if [ -z $ONLY_INSTALL ]; then
-       pip install .;
-    else
-       pip install stardist;
-    fi;
+  - pip install .;
 
 script:
   - if [ -z $ONLY_INSTALL ]; then
