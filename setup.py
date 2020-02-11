@@ -53,6 +53,10 @@ qhull_src = sorted(glob(path.join(qhull_root, '*', '*.c*')))[::-1]
 common_inc = path.join(_dir, 'stardist', 'lib')
 common_src = ['stardist/lib/utils.cpp']
 
+print("++__++"*100)
+print(_dir)
+print(common_inc)
+
 setup(
     name='stardist',
     version=__version__,
@@ -73,7 +77,7 @@ setup(
             'stardist.lib.stardist2d',
             sources=['stardist/lib/stardist2d.cpp','stardist/lib/clipper.cpp'] + common_src,
             extra_compile_args = ['-std=c++11'],
-            include_dirs=[common_inc]+get_numpy_include_dirs(),
+            include_dirs=get_numpy_include_dirs()+[common_inc]+["stardist/lib"],
         ),
         Extension(
             'stardist.lib.stardist3d',
