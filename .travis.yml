@@ -13,11 +13,7 @@ branches:
     - dev
 
 env:
-<<<<<<< HEAD
-  - TENSORFLOW='tensorflow' KERAS='keras'
-=======
   - TENSORFLOW='tensorflow<2' KERAS='keras'
->>>>>>> d58ac9a660a901f0de858dd4cb6c935491a9f6d2
 
 matrix:
   include:
@@ -29,42 +25,19 @@ matrix:
     - os: linux
       python: 3.6
     - os: linux
-<<<<<<< HEAD
       python: 3.7
       dist: xenial
-      env: TENSORFLOW='tensorflow' KERAS='keras' ONLY_INSTALL=1
+      env: TENSORFLOW='tensorflow<2' KERAS='keras' ONLY_INSTALL=1
 
 install:
   - pip install $TENSORFLOW $KERAS
   - if [ -z $ONLY_INSTALL ]; then
-       pip install stardist;
-    else
-       pip install .;
-    fi;
-
-script:
-  - if [ -z $ONLY_INSTALL ]; then
-       echo "only installing";
-    else
-       pytest -v -s --durations=50 -m "not gpu";
-    fi;
-=======
-      python: 3.6
-      dist: xenial
-      env: TENSORFLOW='tensorflow<2' KERAS='keras' INSTALL_FROM_SOURCE=1
-    - os: linux
-      python: 3.7
-      dist: xenial
-      env: TENSORFLOW='tensorflow<2' KERAS='keras' INSTALL_FROM_SOURCE=1
-
-install:
-  - pip install $TENSORFLOW $KERAS
-  - if [ -z $INSTALL_FROM_SOURCE ]; then
        pip install .;
     else
        pip install stardist;
     fi;
 
 script:
-  - pytest -v --durations=50 -m "not gpu";
->>>>>>> d58ac9a660a901f0de858dd4cb6c935491a9f6d2
+  - if [ -z $ONLY_INSTALL ]; then
+       pytest -v --durations=50 -m "not gpu";
+    fi;
