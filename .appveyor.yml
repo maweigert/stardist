@@ -26,8 +26,8 @@ install:
   - set PATH=%PYTHON%;%PYTHON%\\Scripts;%PATH%
   - "python --version"
   - "python -m pip install -U pip"
-  - "pip install tensorflow keras pytest"
-  - "pip install stardist"
+  - "pip install \"tensorflow<2\" keras pytest"
+  - "pip install -v stardist"
   - "pip uninstall -y stardist"
   - "pip install --no-cache-dir --force-reinstall ."
 

@@ -38,7 +38,7 @@ The approach for 3D volumes is similar to the one described for 2D, using pairs 
 This package requires Python 3.5 (or newer).
 
 Please first [install TensorFlow 1.x](https://www.tensorflow.org/install)
-by following the official instructions. (**Do not choose a preview release version of TensorFlow 2.x**)
+by following the official instructions. (**Do not choose TensorFlow 2.x**)
 For [GPU support](https://www.tensorflow.org/install/gpu), it is very
 important to install the specific versions of CUDA and cuDNN that are
 compatible with the respective version of TensorFlow.
@@ -62,6 +62,22 @@ We provide example workflows for 2D and 3D via Jupyter [notebooks](https://githu
 
 ![](https://github.com/mpicbg-csbd/stardist/raw/master/images/example_steps.png)
 
+### Annotating Images
+
+To train a *StarDist* model you will need some ground-truth annotations: for every raw training image there has to be a corresponding label image where all pixels of a cell region are labeled with a distinct integer (and background pixels are labeled with 0). To create such label masks, one can use e.g. the Imagej/Fiji plugin [Labkit](https://imagej.net/Labkit):
+
+1. Install [Fiji](https://fiji.sc) and the [Labkit](https://imagej.net/Labkit) plugin
+2. Open the (2D or 3D) image and start Labkit via `Plugins > Segmentation > Labkit`
+3. Sucessively add a new label and annotate a single cell instance with the brush tool (always check the `override` option) until *all* cells are labeled
+4. Export the label image via `Save Labeling...` and `File format > TIF Image` 
+
+![](https://github.com/mpicbg-csbd/stardist/raw/master/images/labkit_2d_labkit.png)
+
+
+Additional tips:
+
+* The Labkit viewer uses [BigDataViewer](https://imagej.net/BigDataViewer) and its keybindings (e.g. <kbd>s</kbd> for contrast options, <kbd>CTRL</kbd>+<kbd>Shift</kbd>+<kbd>mouse-wheel</kbd> for zoom-in/out etc.)
+* For 3D images (XYZ) it is best to first convert it to a (XYT) timeseries (via `Re-Order Hyperstack` and swapping `z` and `t`) and then use <kbd>[</kbd> and <kbd>]</kbd> in Labkit to walk through the slices.    
 
 ## Troubleshooting
 
@@ -71,14 +87,19 @@ If available, the C++ code will make use of [OpenMP](https://en.wikipedia.org/wi
 
 
 ### macOS
-Although Apple provides the Clang C/C++ compiler via [Xcode](https://developer.apple.com/xcode/), it does not come with OpenMP support.
-Hence, we suggest to install the OpenMP-enabled GCC compiler, e.g. via [Homebrew](https://brew.sh) with `brew install gcc`. After that, you can install the package like this (adjust names/paths as necessary):
+The default Apple C/C++ compiler (`clang`) does not come with OpenMP support and the package build will likely fail.
+To properly build `stardist` you need to install a OpenMP-enabled GCC compiler, e.g. via [Homebrew](https://brew.sh) with `brew install gcc` (which will currently install `gcc-9`/`g++-9`). After that, you can build the package like this (adjust compiler names/paths as necessary):
 
-    CC=/usr/local/bin/gcc-8 CXX=/usr/local/bin/g++-8 pip install stardist
+    CC=gcc-9 CXX=g++-9 pip install stardist
 
 
 ### Windows
 Please install the [Build Tools for Visual Studio 2019](https://www.visualstudio.com/downloads/#build-tools-for-visual-studio-2019) from Microsoft to compile extensions for Python 3.5 and newer (see [this](https://wiki.python.org/moin/WindowsCompilers) for further information). During installation, make sure to select the *C++ build tools*. Note that the compiler comes with OpenMP support.
+
+## ImageJ/Fiji Plugin
+
+We currently provide a ImageJ/Fiji plugin that can be used to run pretrained StarDist models on 2D or 2D+time images. Installation and usage instructions can be found at the [plugin page](https://imagej.net/StarDist).
+
 
 
 ## How to cite 
