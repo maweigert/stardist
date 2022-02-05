@@ -20,7 +20,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-20.04, windows-latest, macos-10.15]
+        # os: [ubuntu-20.04, windows-latest, macos-10.15]
+        os: [macos-latest]
         # os: [ubuntu-latest, windows-latest, macos-latest]
 
     steps:
@@ -36,7 +37,7 @@ jobs:
         name: Checkout repository
 
       - name: Build wheels for CPython (macOS)
-        if: startsWith(matrix.os, 'macos')
+        if: startsWith(matrix.os, 'macos-10.15')
         run: |
           brew config
           brew install gcc@9
@@ -51,6 +52,29 @@ jobs:
           CIBW_BUILD_VERBOSITY: 1
           CIBW_TEST_REQUIRES: pytest tensorflow
           CIBW_TEST_COMMAND: pytest -v -m "not gpu" {project}
+          # use gcc instead of clang
+          CC: /usr/local/bin/gcc-9
+          CXX: /usr/local/bin/g++-9
+
+      - name: Build wheels for CPython (macOS)
+        if: startsWith(matrix.os, 'macos-latest')
+        run: |
+          brew config
+          brew install gcc@9
+          python -m cibuildwheel --output-dir dist
+        env:
+          CIBW_BUILD: "cp3?-*"
+          CIBW_SKIP: "cp35-*"
+          # install fork of 'delocate' to work around bug
+          # CIBW_BEFORE_BUILD: python -m pip install git+https://github.com/uschmidt83/delocate.git@patch-1
+           # TODO: make it work for 10.9 (required libstdc++.dylib and libgomp.dylib from gcc compiled for 10.15)
+          # MACOSX_DEPLOYMENT_TARGET: 10.15
+          CIBW_BUILD_VERBOSITY: 1
+          CIBW_ARCHS_MACOS: arm64
+          CIBW_TEST_REQUIRES: pytest tensorflow
+          
+          #CIBW_TEST_COMMAND: pytest -v -m "not gpu" {project}
+
           # use gcc instead of clang
           CC: /usr/local/bin/gcc-9
           CXX: /usr/local/bin/g++-9
