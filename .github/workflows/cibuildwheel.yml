@@ -56,15 +56,16 @@ jobs:
           CC: /usr/local/bin/gcc-9
           CXX: /usr/local/bin/g++-9
 
-      - name: Build wheels for CPython (macOS)
+      - name: Build wheels for CPython (macOS-latest)
         if: startsWith(matrix.os, 'macos-latest')
         run: |
           brew config
           brew install gcc
+          file `which gcc-11`
           python -m cibuildwheel --output-dir dist
         env:
           CIBW_BUILD: "cp3?-*"
-          CIBW_SKIP: "cp35-*"
+          CIBW_SKIP: "cp37-*"
           CIBW_BUILD_VERBOSITY: 1
           CIBW_ARCHS_MACOS: arm64
           CIBW_TEST_REQUIRES: pytest tensorflow          
