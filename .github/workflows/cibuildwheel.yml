@@ -67,7 +67,7 @@ jobs:
           CIBW_BUILD: "cp3?-*"
           CIBW_SKIP: "cp37-*"
           CIBW_BUILD_VERBOSITY: 1
-          CIBW_ARCHS_MACOS: arm64
+          CIBW_ARCHS_MACOS: universal2
           CIBW_TEST_REQUIRES: pytest tensorflow          
           #CIBW_TEST_COMMAND: pytest -v -m "not gpu" {project}
 
