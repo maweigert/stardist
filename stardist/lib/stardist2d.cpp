@@ -20,6 +20,14 @@
 
 #include <nanoflann.hpp>
 
+
+
+inline int clip(int n, int lower, int upper)
+{
+    return std::max(lower, std::min(n, upper));
+}
+
+
 template <typename T>
 struct PointCloud2D
 {
@@ -615,20 +623,152 @@ static PyObject* c_non_max_suppression_inds(PyObject *self, PyObject *args) {
 }
 
 
+
+static PyObject *c_starflow2d_post(PyObject *self, PyObject *args)
+{
+
+    PyArrayObject *flow = NULL;
+    PyArrayObject *mask = NULL;
+    PyArrayObject *labels = NULL;
+    PyArrayObject *dst = NULL;
+
+    int verbose, rounds;
+    float delta;
+
+    if (!PyArg_ParseTuple(args, "O!O!O!fii", &PyArray_Type, &flow, &PyArray_Type, &mask, &PyArray_Type, &labels,
+                          &delta, &rounds, &verbose))
+        return NULL;
+
+    npy_intp *dims = PyArray_DIMS(flow);
+    npy_intp dims_dst[2];
+    dims_dst[0] = dims[0];
+    dims_dst[1] = dims[1];
+
+    dst = (PyArrayObject *)PyArray_SimpleNew(2, dims_dst, NPY_INT32);
+
+#ifdef __APPLE__    
+#pragma omp parallel for 
+#else
+#pragma omp parallel for schedule(dynamic) 
+#endif
+    for (int i = 0; i < dims[0]; i++)
+    {
+        for (int j = 0; j < dims[1]; j++)
+        {
+
+            // *(int *)PyArray_GETPTR2(dst, i, j) = 0;
+
+            const int value = *(int *)PyArray_GETPTR2(mask, i, j);
+            if (value == 0)
+            {
+                *(int *)PyArray_GETPTR2(dst, i, j) = 0;
+            }
+            else
+            {
+                float y = i;
+                float x = j;
+
+
+                for (int n = 0; n < rounds; n++)
+                {
+                    int i2 = clip(int(y), 0, dims[0] - 1);
+                    int j2 = clip(int(x), 0, dims[1] - 1);
+
+                    const float dx = *(float *)PyArray_GETPTR3(flow, i2, j2, 0);
+                    const float dy = *(float *)PyArray_GETPTR3(flow, i2, j2, 1);
+                
+                    y += delta * dx;
+                    x += delta * dy;
+                }
+
+                int i2 = clip(int(y), 0, dims[0] - 1);
+                int j2 = clip(int(x), 0, dims[1] - 1);
+
+                *(int *)PyArray_GETPTR2(dst, i, j) = *(int *)PyArray_GETPTR2(labels, i2,j2 );
+
+                // *(int *)PyArray_GETPTR2(dst, i2, j2) = 1; 
+            }
+        }
+    }
+
+    return PyArray_Return(dst);
+}
+static PyObject *c_starflow2d(PyObject *self, PyObject *args)
+{
+
+    PyArrayObject *dist = NULL;
+    PyArrayObject *mask = NULL;
+    PyArrayObject *dst = NULL;
+
+    int verbose, rounds;
+    float delta;
+
+    if (!PyArg_ParseTuple(args, "O!O!", &PyArray_Type, &dist, &PyArray_Type, &mask))
+        return NULL;
+
+    npy_intp *dims = PyArray_DIMS(dist);
+    const int n_rays = dims[2];
+
+    npy_intp dims_dst[3];
+    dims_dst[0] = dims[0];
+    dims_dst[1] = dims[1];
+    dims_dst[2] = 2;
+
+    dst = (PyArrayObject *)PyArray_SimpleNew(3, dims_dst, NPY_FLOAT);
+
+    for (int i = 0; i < dims[0]; i++)
+    {
+        for (int j = 0; j < dims[1]; j++)
+        {
+            const int value = *(int *)PyArray_GETPTR2(mask, i, j);
+            if (value == 0)
+            {
+                *(float *)PyArray_GETPTR3(dst, i, j, 0) = 0;
+                *(float *)PyArray_GETPTR3(dst, i, j, 1) = 0;
+            }
+            else
+            {
+
+                const float st_rays = (2 * M_PI) / n_rays; // step size for ray angles
+                float weight_sum = 0;
+                float di = 0;
+                float dj = 0;
+
+                for (int k = 0; k < n_rays; k++)
+                {
+                    const float phi = k * st_rays;
+                    const float r = *(float *)PyArray_GETPTR3(dist, i, j, k);
+                    const float weight = r;
+
+                    di += sin(phi) * r * weight;
+                    dj += cos(phi) * r * weight;
+
+                    weight_sum += weight;
+                }
+
+                di = di / weight_sum;
+                dj = dj / weight_sum;
+
+                *(float *)PyArray_GETPTR3(dst, i, j, 0) = di;
+                *(float *)PyArray_GETPTR3(dst, i, j, 1) = dj;
+            }
+        }
+    }
+
+    return PyArray_Return(dst);
+}
+
 //------------------------------------------------------------------------
 
 
 static struct PyMethodDef methods[] = {
-                                       {"c_non_max_suppression_inds_old",
-                                        c_non_max_suppression_inds_old,
-                                        METH_VARARGS, "non-maximum suppression"},
-                                       {"c_non_max_suppression_inds",
-                                        c_non_max_suppression_inds,
-                                        METH_VARARGS, "non-maximum suppression"},
-                                       {"c_star_dist",
-                                        c_star_dist,
-                                        METH_VARARGS, "star dist calculation"},
-                                       {NULL, NULL, 0, NULL}
+    {"c_non_max_suppression_inds_old", c_non_max_suppression_inds_old, METH_VARARGS, "non-maximum suppression"},
+    {"c_non_max_suppression_inds", c_non_max_suppression_inds, METH_VARARGS, "non-maximum suppression"},
+    {"c_star_dist", c_star_dist, METH_VARARGS, "star dist calculation"},
+    {"c_starflow2d_post", c_starflow2d_post, METH_VARARGS, "post processing"},
+    {"c_starflow2d", c_starflow2d, METH_VARARGS, "flow"},
+    {NULL, NULL, 0, NULL}
+
 };
 
 static struct PyModuleDef moduledef = {

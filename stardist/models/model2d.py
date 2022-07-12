@@ -16,12 +16,12 @@ from distutils.version import LooseVersion
 
 keras = keras_import()
 K = keras_import('backend')
-Input, Conv2D, MaxPooling2D = keras_import('layers', 'Input', 'Conv2D', 'MaxPooling2D')
+Input, Conv2D, MaxPooling2D, UpSampling2D = keras_import('layers', 'Input', 'Conv2D', 'MaxPooling2D', 'UpSampling2D')
 Model = keras_import('models', 'Model')
 
 from .base import StarDistBase, StarDistDataBase, _tf_version_at_least
 from ..sample_patches import sample_patches
-from ..utils import edt_prob, _normalize_grid, mask_to_categorical
+from ..utils import edt_prob, _normalize_grid, mask_to_categorical, _flow_prob_edt
 from ..geometry import star_dist, dist_to_coord, polygons_to_label
 from ..nms import non_maximum_suppression, non_maximum_suppression_sparse
 
@@ -60,19 +60,19 @@ class StarDistData2D(StarDistDataBase):
         X, Y = tuple(zip(*tuple(self.augmenter(_x, _y) for _x, _y in zip(X,Y))))
 
 
-        prob = np.stack([edt_prob(lbl[self.b][self.ss_grid[1:3]]) for lbl in Y])
-        # prob = np.stack([edt_prob(lbl[self.b]) for lbl in Y])
-        # prob = prob[self.ss_grid]
 
         if self.shape_completion:
             Y_cleared = [clear_border(lbl) for lbl in Y]
             _dist     = np.stack([star_dist(lbl,self.n_rays,mode=self.sd_mode)[self.b+(slice(None),)] for lbl in Y_cleared])
             dist      = _dist[self.ss_grid]
             dist_mask = np.stack([edt_prob(lbl[self.b][self.ss_grid[1:3]]) for lbl in Y_cleared])
+            raise NotImplementedError('fix flow prob first!')
         else:
             # directly subsample with grid
             dist      = np.stack([star_dist(lbl,self.n_rays,mode=self.sd_mode, grid=self.grid) for lbl in Y])
-            dist_mask = prob
+            prob      = np.stack([_flow_prob_edt(_lbl[self.ss_grid[1:3]], _dist) for _lbl, _dist in zip(Y, dist)])
+            # prob      = np.stack([(lbl[self.ss_grid[1:3]]>0).astype(np.float32) for lbl in Y])
+            dist_mask = np.stack([(lbl[self.ss_grid[1:3]]>0).astype(np.float32) for lbl in Y])
 
         X = np.stack(X)
         if X.ndim == 3: # input image has no channel axis
@@ -298,9 +298,13 @@ class StarDist2D(StarDistBase):
 
         input_img = Input(self.config.net_input_shape, name='input')
 
+        global_pool = 2 
+
+        pooled_img = Conv2D(self.config.unet_n_filter_base, self.config.unet_kernel_size,strides=(global_pool, global_pool),
+                                    padding='same', activation=self.config.unet_activation)(input_img)
+
         # maxpool input image to grid size
         pooled = np.array([1,1])
-        pooled_img = input_img
         while tuple(pooled) != tuple(self.config.grid):
             pool = 1 + (np.asarray(self.config.grid) > pooled)
             pooled *= pool
@@ -310,12 +314,14 @@ class StarDist2D(StarDistBase):
             pooled_img = MaxPooling2D(pool)(pooled_img)
 
         unet_base = unet_block(**unet_kwargs)(pooled_img)
+        unet_base = UpSampling2D(global_pool)(unet_base)
 
         if self.config.net_conv_after_unet > 0:
             unet = Conv2D(self.config.net_conv_after_unet, self.config.unet_kernel_size,
                           name='features', padding='same', activation=self.config.unet_activation)(unet_base)
         else:
             unet = unet_base
+
 
         output_prob = Conv2D(                 1, (1,1), name='prob', padding='same', activation='sigmoid')(unet)
         output_dist = Conv2D(self.config.n_rays, (1,1), name='dist', padding='same', activation='linear')(unet)

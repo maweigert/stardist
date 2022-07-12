@@ -125,6 +125,29 @@ def _edt_prob_scipy(lbl_img, anisotropy=None):
     return prob
 
 
+def _flow_prob_edt(lbl_img, dist, decay=20, anisotropy=None):
+    from .geometry import starflow2d
+    if anisotropy is not None:
+        raise NotImplementedError(anisotropy)
+    lbl_img = np.ascontiguousarray(lbl_img)
+    constant_img = lbl_img.min() == lbl_img.max() and lbl_img.flat[0] > 0
+    # we just need to compute the edt once but then normalize it for each object
+    prob = np.zeros(lbl_img.shape, np.float32)
+    regs = regionprops(lbl_img, intensity_image=prob)
+
+    flow = starflow2d(dist, lbl_img)
+    mag_flow = np.linalg.norm(flow, axis=-1)
+
+    for r in regs:
+        sl = r.slice
+        if sl is None: continue
+        _mask = lbl_img[sl]==r.label
+        f = mag_flow[sl][_mask] 
+        f = f-np.min(f)
+        f = f/(np.max(f)+1e-5) 
+        prob[sl][_mask] = np.exp(-decay*f**2)        
+    return prob
+
 def _fill_label_holes(lbl_img, **kwargs):
     lbl_img_filled = np.zeros_like(lbl_img)
     for l in (set(np.unique(lbl_img)) - set([0])):
