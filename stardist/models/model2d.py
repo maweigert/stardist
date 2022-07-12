@@ -300,7 +300,7 @@ class StarDist2D(StarDistBase):
 
         global_pool = 2 
 
-        pooled_img = Conv2D(self.config.unet_n_filter_base, self.config.unet_kernel_size,strides=(global_pool, global_pool),
+        pooled_img = Conv2D(self.config.unet_n_filter_base, 5 ,strides=(global_pool, global_pool),
                                     padding='same', activation=self.config.unet_activation)(input_img)
 
         # maxpool input image to grid size

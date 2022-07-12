@@ -132,7 +132,9 @@ def _flow_prob_edt(lbl_img, dist, decay=20, anisotropy=None):
     lbl_img = np.ascontiguousarray(lbl_img)
     constant_img = lbl_img.min() == lbl_img.max() and lbl_img.flat[0] > 0
     # we just need to compute the edt once but then normalize it for each object
-    prob = np.zeros(lbl_img.shape, np.float32)
+    # prob = np.zeros(lbl_img.shape, np.float32)
+
+    prob = edt(lbl_img, anisotropy=anisotropy, black_border=constant_img, parallel=_edt_parallel)
     regs = regionprops(lbl_img, intensity_image=prob)
 
     flow = starflow2d(dist, lbl_img)
@@ -145,7 +147,11 @@ def _flow_prob_edt(lbl_img, dist, decay=20, anisotropy=None):
         f = mag_flow[sl][_mask] 
         f = f-np.min(f)
         f = f/(np.max(f)+1e-5) 
-        prob[sl][_mask] = np.exp(-decay*f**2)        
+
+        f = np.exp(-decay*f**2) * prob[sl][_mask] 
+        f = f/(np.max(f)+1e-5) 
+        # prob[sl][_mask] = np.exp(-decay*f**2)        
+        prob[sl][_mask] = f
     return prob
 
 def _fill_label_holes(lbl_img, **kwargs):
