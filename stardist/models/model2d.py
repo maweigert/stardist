@@ -552,7 +552,7 @@ class StarDist2D(StarDistBase):
         assert len(self.config.unet_pool) == len(self.config.grid)
         div_by = dict(zip(
             self.config.axes.replace('C',''),
-            tuple(p**self.config.unet_n_depth * g for p,g in zip(self.config.unet_pool,self.config.grid))
+            tuple(2*p**self.config.unet_n_depth * g for p,g in zip(self.config.unet_pool,self.config.grid))
         ))
         return tuple(div_by.get(a,1) for a in query_axes)
 
