@@ -24,7 +24,7 @@ from ..sample_patches import sample_patches
 from ..utils import edt_prob, _normalize_grid, mask_to_categorical, _flow_prob_edt
 from ..geometry import star_dist, dist_to_coord, polygons_to_label
 from ..nms import non_maximum_suppression, non_maximum_suppression_sparse
-
+# from .backbones2d import get_backbone2d
 
 class StarDistData2D(StarDistDataBase):
 
@@ -193,7 +193,7 @@ class Config2D(BaseConfig):
         self.n_classes                 = None if n_classes is None else int(n_classes)
 
         # default config (can be overwritten by kwargs below)
-        if self.backbone == 'unet':
+        if self.backbone in ('unet', 'unetv2'):
             self.unet_n_depth          = 3
             self.unet_kernel_size      = 3,3
             self.unet_n_filter_base    = 32
@@ -293,15 +293,18 @@ class StarDist2D(StarDistBase):
 
 
     def _build(self):
-        self.config.backbone == 'unet' or _raise(NotImplementedError())
+        self.config.backbone in ('unet' , 'unetv2') or _raise(NotImplementedError())
         unet_kwargs = {k[len('unet_'):]:v for (k,v) in vars(self.config).items() if k.startswith('unet_')}
 
         input_img = Input(self.config.net_input_shape, name='input')
 
-        global_pool = 2 
-
-        pooled_img = Conv2D(self.config.unet_n_filter_base, 5 ,strides=(global_pool, global_pool),
+        if self.config.backbone == "unetv2":
+            global_pool = 2 
+            pooled_img = Conv2D(self.config.unet_n_filter_base, 5 ,strides=(global_pool, global_pool),
                                     padding='same', activation=self.config.unet_activation)(input_img)
+        else: 
+            global_pool = 1
+            pooled_img = input_img
 
         # maxpool input image to grid size
         pooled = np.array([1,1])
@@ -314,7 +317,9 @@ class StarDist2D(StarDistBase):
             pooled_img = MaxPooling2D(pool)(pooled_img)
 
         unet_base = unet_block(**unet_kwargs)(pooled_img)
-        unet_base = UpSampling2D(global_pool)(unet_base)
+
+        if global_pool>1:
+            unet_base = UpSampling2D(global_pool)(unet_base)
 
         if self.config.net_conv_after_unet > 0:
             unet = Conv2D(self.config.net_conv_after_unet, self.config.unet_kernel_size,
@@ -547,13 +552,15 @@ class StarDist2D(StarDistBase):
 
 
     def _axes_div_by(self, query_axes):
-        self.config.backbone == 'unet' or _raise(NotImplementedError())
+        self.config.backbone in ('unet', 'unetv2') or _raise(NotImplementedError())
         query_axes = axes_check_and_normalize(query_axes)
         assert len(self.config.unet_pool) == len(self.config.grid)
+        extra = 2 if self.config.backbone=='unetv2' else 1
         div_by = dict(zip(
             self.config.axes.replace('C',''),
-            tuple(2*p**self.config.unet_n_depth * g for p,g in zip(self.config.unet_pool,self.config.grid))
+            tuple(extra*p**self.config.unet_n_depth * g for p,g in zip(self.config.unet_pool,self.config.grid))
         ))
+        
         return tuple(div_by.get(a,1) for a in query_axes)
 
 
