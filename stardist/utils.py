@@ -147,7 +147,6 @@ def _flow_prob_edt(lbl_img, dist, decay=20, anisotropy=None):
         f = mag_flow[sl][_mask] 
         f = f-np.min(f)
         f = f/(np.max(f)+1e-5) 
-
         f = np.exp(-decay*f**2) * prob[sl][_mask] 
         f = f/(np.max(f)+1e-5) 
         # prob[sl][_mask] = np.exp(-decay*f**2)        

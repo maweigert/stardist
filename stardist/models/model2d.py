@@ -71,6 +71,8 @@ class StarDistData2D(StarDistDataBase):
             # directly subsample with grid
             dist      = np.stack([star_dist(lbl,self.n_rays,mode=self.sd_mode, grid=self.grid) for lbl in Y])
             prob      = np.stack([_flow_prob_edt(_lbl[self.ss_grid[1:3]], _dist) for _lbl, _dist in zip(Y, dist)])
+            # prob      = np.stack([edt_prob(_lbl)[self.ss_grid[1:3]] for _lbl in Y])
+
             # prob      = np.stack([(lbl[self.ss_grid[1:3]]>0).astype(np.float32) for lbl in Y])
             dist_mask = np.stack([(lbl[self.ss_grid[1:3]]>0).astype(np.float32) for lbl in Y])
 
