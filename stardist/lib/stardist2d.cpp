@@ -624,7 +624,7 @@ static PyObject* c_non_max_suppression_inds(PyObject *self, PyObject *args) {
 
 
 
-static PyObject *c_starflow2d_post(PyObject *self, PyObject *args)
+static PyObject *c_starflow2d_map(PyObject *self, PyObject *args)
 {
 
     PyArrayObject *flow = NULL;
@@ -635,7 +635,7 @@ static PyObject *c_starflow2d_post(PyObject *self, PyObject *args)
     int verbose, rounds;
     float delta;
 
-    if (!PyArg_ParseTuple(args, "O!O!O!fii", &PyArray_Type, &flow, &PyArray_Type, &mask, &PyArray_Type, &labels,
+    if (!PyArg_ParseTuple(args, "O!O!O!fii", &PyArray_Type, &flow, &PyArray_Type, &labels, &PyArray_Type, &mask, 
                           &delta, &rounds, &verbose))
         return NULL;
 
@@ -765,7 +765,7 @@ static struct PyMethodDef methods[] = {
     {"c_non_max_suppression_inds_old", c_non_max_suppression_inds_old, METH_VARARGS, "non-maximum suppression"},
     {"c_non_max_suppression_inds", c_non_max_suppression_inds, METH_VARARGS, "non-maximum suppression"},
     {"c_star_dist", c_star_dist, METH_VARARGS, "star dist calculation"},
-    {"c_starflow2d_post", c_starflow2d_post, METH_VARARGS, "post processing"},
+    {"c_starflow2d_map", c_starflow2d_map, METH_VARARGS, "post processing"},
     {"c_starflow2d", c_starflow2d, METH_VARARGS, "flow"},
     {NULL, NULL, 0, NULL}
 
