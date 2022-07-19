@@ -125,7 +125,7 @@ def _edt_prob_scipy(lbl_img, anisotropy=None):
     return prob
 
 
-def _flow_prob_edt(lbl_img, dist, decay=20, anisotropy=None):
+def _flow_prob_edt(lbl_img, dist, decay=10, anisotropy=None):
     from .geometry import starflow2d
     if anisotropy is not None:
         raise NotImplementedError(anisotropy)

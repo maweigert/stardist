@@ -30,7 +30,9 @@ class StarDistData2D(StarDistDataBase):
 
     def __init__(self, X, Y, batch_size, n_rays, length,
                  n_classes=None, classes=None,
-                 patch_size=(256,256), b=32, grid=(1,1), shape_completion=False, augmenter=None, foreground_prob=0, **kwargs):
+                 patch_size=(256,256), b=32, grid=(1,1), shape_completion=False, augmenter=None, foreground_prob=0, 
+                 prob_mode='edt',
+                 **kwargs):
 
         super().__init__(X=X, Y=Y, n_rays=n_rays, grid=grid,
                          n_classes=n_classes, classes=classes,
@@ -44,7 +46,7 @@ class StarDistData2D(StarDistDataBase):
             self.b = slice(None),slice(None)
 
         self.sd_mode = 'opencl' if self.use_gpu else 'cpp'
-
+        self.prob_mode = prob_mode
 
     def __getitem__(self, i):
         idx = self.batch(i)
@@ -59,8 +61,6 @@ class StarDistData2D(StarDistDataBase):
 
         X, Y = tuple(zip(*tuple(self.augmenter(_x, _y) for _x, _y in zip(X,Y))))
 
-
-
         if self.shape_completion:
             Y_cleared = [clear_border(lbl) for lbl in Y]
             _dist     = np.stack([star_dist(lbl,self.n_rays,mode=self.sd_mode)[self.b+(slice(None),)] for lbl in Y_cleared])
@@ -70,11 +70,14 @@ class StarDistData2D(StarDistDataBase):
         else:
             # directly subsample with grid
             dist      = np.stack([star_dist(lbl,self.n_rays,mode=self.sd_mode, grid=self.grid) for lbl in Y])
-            prob      = np.stack([_flow_prob_edt(_lbl[self.ss_grid[1:3]], _dist) for _lbl, _dist in zip(Y, dist)])
-            # prob      = np.stack([edt_prob(_lbl)[self.ss_grid[1:3]] for _lbl in Y])
-
-            # prob      = np.stack([(lbl[self.ss_grid[1:3]]>0).astype(np.float32) for lbl in Y])
             dist_mask = np.stack([(lbl[self.ss_grid[1:3]]>0).astype(np.float32) for lbl in Y])
+
+        if self.prob_mode=='edt':
+            prob      = np.stack([edt_prob(lbl[self.b][self.ss_grid[1:3]]) for lbl in Y])
+        elif self.prob_mode=='flow':
+            prob      = np.stack([_flow_prob_edt(_lbl[self.ss_grid[1:3]], _dist) for _lbl, _dist in zip(Y, dist)])
+        else: 
+            raise ValueError(f'unknown prob mode {self.prob_mode} !')
 
         X = np.stack(X)
         if X.ndim == 3: # input image has no channel axis
@@ -171,6 +174,8 @@ class Config2D(BaseConfig):
         Learning rate for training.
     train_batch_size : int
         Batch size for training.
+    train_prob_mode : str
+        mode to create object probabilities ('edt' or 'flow')
     train_n_val_patches : int
         Number of patches to be extracted from validation images (``None`` = one patch per image).
     train_tensorboard : bool
@@ -183,7 +188,7 @@ class Config2D(BaseConfig):
         .. _ReduceLROnPlateau: https://keras.io/api/callbacks/reduce_lr_on_plateau/
     """
 
-    def __init__(self, axes='YX', n_rays=32, n_channel_in=1, grid=(1,1), n_classes=None, backbone='unet', **kwargs):
+    def __init__(self, axes='YX', n_rays=32, n_channel_in=1, grid=(1,1), n_classes=None, backbone='unet',  **kwargs):
         """See class docstring."""
 
         super().__init__(axes=axes, n_channel_in=n_channel_in, n_channel_out=1+n_rays)
@@ -225,6 +230,7 @@ class Config2D(BaseConfig):
         self.train_background_reg      = 1e-4
         self.train_foreground_only     = 0.9
         self.train_sample_cache        = True
+        self.train_prob_mode           = 'edt'  # 'edt' or 'flow'
 
         self.train_dist_loss           = 'mae'
         self.train_loss_weights        = (1,0.2) if self.n_classes is None else (1,0.2,1)
@@ -426,6 +432,7 @@ class StarDist2D(StarDistBase):
             foreground_prob  = self.config.train_foreground_only,
             n_classes        = self.config.n_classes,
             sample_ind_cache = self.config.train_sample_cache,
+            prob_mode        = self.config.train_prob_mode
         )
 
         # generate validation data and store in numpy arrays
