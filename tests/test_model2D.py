@@ -118,7 +118,8 @@ def test_optimize_thresholds(model2d):
 
 @pytest.mark.parametrize('n_classes, classes', [(None,(1,1)),(2,(1,2))])
 @pytest.mark.parametrize('shape_completion',(False,True))
-def test_stardistdata(shape_completion, n_classes, classes):
+@pytest.mark.parametrize('prob_mode',('edt', 'flow'))
+def test_stardistdata(shape_completion, n_classes, classes, prob_mode):
     np.random.seed(42)
     from stardist.models import StarDistData2D
     img, mask = crop(test_image_nuclei_2d(return_mask=True))
@@ -126,7 +127,8 @@ def test_stardistdata(shape_completion, n_classes, classes):
                        grid = (2,2),
                        n_classes = n_classes, classes = classes,
                        shape_completion = shape_completion, b = 8,
-                       batch_size=1, patch_size=(30, 40), n_rays=32, length=1)
+                       prob_mode=prob_mode, 
+                       batch_size=1, patch_size=(128, 100), n_rays=32, length=1)
     a, b = s[0]
     return a,b, s
 
@@ -514,10 +516,13 @@ def test_load_and_export_TF(model2d):
 
 if __name__ == '__main__':
     from conftest import _model2d
+
+    # (img,), (p,d,pc), data = test_stardistdata(shape_completion=False, n_classes=1, classes=None, prob_mode='flow')
+
     # test_speed(_model2d())
     # _test_model_multiclass(n_classes = 1, classes = "auto", n_channel = None, basedir = None)
     # a,b,s = test_stardistdata_multithreaded()
-    # test_model("foo", 32, (1,1), None, 4)
+    test_model("foo", 32, (1,1), None, 1, False)
 
     # test_foreground_warning()
 
