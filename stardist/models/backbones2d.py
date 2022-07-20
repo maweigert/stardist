@@ -1,0 +1,61 @@
+import numpy as np
+from csbdeep.internals.blocks import unet_block
+from csbdeep.utils.tf import keras_import
+keras = keras_import()
+K = keras_import('backend')
+Input, Conv2D, MaxPooling2D, UpSampling2D = keras_import('layers', 'Input', 'Conv2D', 'MaxPooling2D', 'UpSampling2D')
+Model = keras_import('models', 'Model')
+
+
+
+def get_backbone2d(input_img, config):
+    """ 
+    return backbone (for prob, dist), backbone_base (for class)
+    """
+    def _pool_grid(x):
+        grid = np.asarray(config.grid)
+        assert all(g==grid[0] for g in grid)
+        pooled = np.array([1,1])
+        while tuple(pooled) != tuple(grid):
+            pool = 1 + (grid > pooled)
+            pooled *= pool
+            for _ in range(config.unet_n_conv_per_depth):
+                x = Conv2D(config.unet_n_filter_base, config.unet_kernel_size,
+                                    padding='same', activation=config.unet_activation)(x)
+            x = MaxPooling2D(pool)(x)
+        return x 
+
+    if config.backbone == "unet":
+        unet_kwargs = {k[len('unet_'):]:v for (k,v) in vars(config).items() if k.startswith('unet_')}
+        pooled_img = _pool_grid(input_img)
+        backbone_base = unet_block(**unet_kwargs)(pooled_img)
+        if config.net_conv_after_unet > 0:
+            backbone = Conv2D(config.net_conv_after_unet, config.unet_kernel_size,
+                          name='features', padding='same', activation=config.unet_activation)(backbone_base)
+                        
+        else:
+            backbone = backbone_base
+        
+    elif config.backbone == "unetv2":
+        unet_kwargs = {k[len('unet_'):]:v for (k,v) in vars(config).items() if k.startswith('unet_')}
+        unet_kwargs['expansion'] =  1.5
+        global_pool = 2 
+        pooled_img = Conv2D(config.unet_n_filter_base, 5 ,strides=(global_pool, global_pool),
+                                padding='same', activation=config.unet_activation)(input_img)
+        pooled_img = _pool_grid(pooled_img)
+        backbone_base = unet_block(**unet_kwargs)(pooled_img)
+        backbone_base = UpSampling2D(global_pool)(backbone_base)
+
+        if config.net_conv_after_unet > 0:
+            backbone = Conv2D(config.net_conv_after_unet, config.unet_kernel_size,
+                          name='features', padding='same', activation=config.unet_activation)(backbone_base)
+                        
+        else:
+            backbone = backbone_base
+
+    else: 
+        raise KeyError(config.backbone)
+
+    return backbone, backbone_base
+
+    
