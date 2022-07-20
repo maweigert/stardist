@@ -6,11 +6,9 @@ K = keras_import('backend')
 Input, Conv2D, MaxPooling2D, UpSampling2D = keras_import('layers', 'Input', 'Conv2D', 'MaxPooling2D', 'UpSampling2D')
 Model = keras_import('models', 'Model')
 
-
-
 def get_backbone2d(input_img, config):
     """ 
-    return backbone (for prob, dist), backbone_base (for class)
+    return features prob, dist, probclass
     """
     def _pool_grid(x):
         grid = np.asarray(config.grid)
@@ -28,14 +26,8 @@ def get_backbone2d(input_img, config):
     if config.backbone == "unet":
         unet_kwargs = {k[len('unet_'):]:v for (k,v) in vars(config).items() if k.startswith('unet_')}
         pooled_img = _pool_grid(input_img)
-        backbone_base = unet_block(**unet_kwargs)(pooled_img)
-        if config.net_conv_after_unet > 0:
-            backbone = Conv2D(config.net_conv_after_unet, config.unet_kernel_size,
-                          name='features', padding='same', activation=config.unet_activation)(backbone_base)
-                        
-        else:
-            backbone = backbone_base
-        
+        backbone = unet_block(**unet_kwargs)(pooled_img)
+
     elif config.backbone == "unetv2":
         unet_kwargs = {k[len('unet_'):]:v for (k,v) in vars(config).items() if k.startswith('unet_')}
         unet_kwargs['expansion'] =  1.5
@@ -43,19 +35,12 @@ def get_backbone2d(input_img, config):
         pooled_img = Conv2D(config.unet_n_filter_base, 5 ,strides=(global_pool, global_pool),
                                 padding='same', activation=config.unet_activation)(input_img)
         pooled_img = _pool_grid(pooled_img)
-        backbone_base = unet_block(**unet_kwargs)(pooled_img)
-        backbone_base = UpSampling2D(global_pool)(backbone_base)
-
-        if config.net_conv_after_unet > 0:
-            backbone = Conv2D(config.net_conv_after_unet, config.unet_kernel_size,
-                          name='features', padding='same', activation=config.unet_activation)(backbone_base)
-                        
-        else:
-            backbone = backbone_base
+        backbone = unet_block(**unet_kwargs)(pooled_img)
+        backbone = UpSampling2D(global_pool)(backbone)
 
     else: 
         raise KeyError(config.backbone)
 
-    return backbone, backbone_base
+    return backbone
 
     

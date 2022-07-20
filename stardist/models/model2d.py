@@ -303,25 +303,28 @@ class StarDist2D(StarDistBase):
 
 
     def _build(self):
-        self.config.backbone in ('unet' , 'unetv2') or _raise(NotImplementedError())
-        
-
         input_img = Input(self.config.net_input_shape, name='input')
 
-        backbone, backbone_base = get_backbone2d(input_img, self.config)
+        backbone = get_backbone2d(input_img, self.config)
 
-        output_prob = Conv2D(                 1, (1,1), name='prob', padding='same', activation='sigmoid')(backbone)
-        output_dist = Conv2D(self.config.n_rays, (1,1), name='dist', padding='same', activation='linear')(backbone)
+        feat_prob = Conv2D(self.config.net_conv_after_unet, self.config.unet_kernel_size, 
+                padding='same', activation = self.config.unet_activation)(backbone)
+
+        # for backwards compatibility 
+        if self.config.backbone=='unet':
+            feat_dist = feat_prob 
+        else:    
+            feat_dist = Conv2D(self.config.net_conv_after_unet, self.config.unet_kernel_size, 
+                            padding='same', activation = self.config.unet_activation)(backbone)
+
+        output_prob = Conv2D(1, (1,1), name='prob', padding='same', activation='sigmoid')(feat_prob)
+        output_dist = Conv2D(self.config.n_rays, (1,1), name='dist', padding='same', activation='linear')(feat_dist)
 
         # attach extra classification head when self.n_classes is given
         if self._is_multiclass():
-            if self.config.net_conv_after_unet > 0:
-                backbone_class  = Conv2D(self.config.net_conv_after_unet, self.config.unet_kernel_size,
-                                     name='features_class', padding='same', activation=self.config.unet_activation)(backbone_base)
-            else:
-                backbone_class  = backbone_base
-
-            output_prob_class  = Conv2D(self.config.n_classes+1, (1,1), name='prob_class', padding='same', activation='softmax')(backbone_class)
+            feat_prob_class  = Conv2D(self.config.net_conv_after_unet, self.config.unet_kernel_size,
+                                     padding='same', activation=self.config.unet_activation)(backbone)
+            output_prob_class  = Conv2D(self.config.n_classes+1, (1,1), name='prob_class', padding='same', activation='softmax')(feat_prob_class)
             return Model([input_img], [output_prob,output_dist,output_prob_class])
         else:
             return Model([input_img], [output_prob,output_dist])
