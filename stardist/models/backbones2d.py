@@ -38,9 +38,17 @@ def get_backbone2d(input_img, config):
         pooled_img = _pool_grid(pooled_img)
         backbone = unet_block(**unet_kwargs)(pooled_img)
         backbone = UpSampling2D(global_pool)(backbone)
-    elif config.backbone == "fpn":
+    elif config.backbone == "fpn_resnet18":
         pooled_img = _pool_grid(input_img)
         backbone = segmentation_models.FPN('resnet18', encoder_weights=None, input_shape=(None,None,config.unet_n_filter_base) if max(config.grid)>1 else (None,None,1), 
+                            pyramid_block_filters=128, classes=128, activation="linear")(pooled_img)        
+    elif config.backbone == "fpn_resnext50":
+        pooled_img = _pool_grid(input_img)
+        backbone = segmentation_models.FPN('resnext50', encoder_weights=None, input_shape=(None,None,config.unet_n_filter_base) if max(config.grid)>1 else (None,None,1), 
+                            pyramid_block_filters=128, classes=128, activation="linear")(pooled_img)        
+    elif config.backbone == "fpn_seresnet18":
+        pooled_img = _pool_grid(input_img)
+        backbone = segmentation_models.FPN('seresnet18', encoder_weights=None, input_shape=(None,None,config.unet_n_filter_base) if max(config.grid)>1 else (None,None,1), 
                             pyramid_block_filters=128, classes=128, activation="linear")(pooled_img)        
     elif config.backbone == "linknet":
         backbone = segmentation_models.Linknet('resnet18', encoder_weights=None, input_shape=config.net_input_shape, classes=128, activation="linear")(input_img)
@@ -52,7 +60,9 @@ def get_backbone2d(input_img, config):
 if __name__ == "__main__":
     from stardist.models import Config2D, StarDist2D
 
-    conf = Config2D(backbone='fpn', n_classes=1, grid=(2,2))
+    # conf = Config2D(backbone='fpn_resnext50', n_classes=1)
+    # conf = Config2D(backbone='fpn_resnet18', n_classes=1)
+    conf = Config2D(backbone='fpn_seresnet18', n_classes=1)
     model = StarDist2D(conf, None,None)
 
     x = np.zeros((1024,1024))

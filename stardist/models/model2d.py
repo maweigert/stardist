@@ -542,7 +542,7 @@ class StarDist2D(StarDistBase):
                 self.config.axes.replace('C',''),
                 tuple(extra*p**self.config.unet_n_depth * g for p,g in zip(self.config.unet_pool,self.config.grid))
             ))
-        elif self.config.backbone=='fpn':
+        elif self.config.backbone in ('fpn_resnet18','fpn_seresnet18', 'fpn_resnext50'):
             div_by = dict(zip(
                 self.config.axes.replace('C',''),
                 tuple(32 for p,g in zip(self.config.unet_pool,self.config.grid))
