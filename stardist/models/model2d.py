@@ -542,12 +542,18 @@ class StarDist2D(StarDistBase):
                 self.config.axes.replace('C',''),
                 tuple(extra*p**self.config.unet_n_depth * g for p,g in zip(self.config.unet_pool,self.config.grid))
             ))
-        elif self.config.backbone=='fpn_resnet18':
+        elif self.config.backbone=='fpn':
             div_by = dict(zip(
                 self.config.axes.replace('C',''),
                 tuple(32 for p,g in zip(self.config.unet_pool,self.config.grid))
             ))
-        
+        elif self.config.backbone=='linknet':
+            div_by = dict(zip(
+                self.config.axes.replace('C',''),
+                tuple(32 for p,g in zip(self.config.unet_pool,self.config.grid))
+            ))
+        else:
+            raise ValueError(f'Cannot infer axes_div_by for backbone {self.config.backbone}!')
         return tuple(div_by.get(a,1) for a in query_axes)
 
 
