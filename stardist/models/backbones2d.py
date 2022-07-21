@@ -1,4 +1,6 @@
 import numpy as np
+import segmentation_models
+
 from csbdeep.internals.blocks import unet_block
 from csbdeep.utils.tf import keras_import
 keras = keras_import()
@@ -37,10 +39,23 @@ def get_backbone2d(input_img, config):
         pooled_img = _pool_grid(pooled_img)
         backbone = unet_block(**unet_kwargs)(pooled_img)
         backbone = UpSampling2D(global_pool)(backbone)
+    elif config.backbone == "fpn_resnet18":
+        backbone = segmentation_models.FPN('resnet18', encoder_weights=None, input_shape=config.net_input_shape, classes=128, activation="linear")(input_img)
 
     else: 
         raise KeyError(config.backbone)
 
     return backbone
 
-    
+if __name__ == "__main__":
+    from stardist.models import Config2D, StarDist2D
+
+    conf = Config2D(backbone='fpn_resnet18', n_classes=1)
+    model = StarDist2D(conf, None,None)
+
+    x = np.zeros((256,256))
+    x[128,128] = 1 
+
+    x = np.zeros((16,16))
+
+    p,d, pc = model.predict(x)

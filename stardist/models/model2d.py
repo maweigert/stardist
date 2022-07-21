@@ -201,21 +201,17 @@ class Config2D(BaseConfig):
         self.n_classes                 = None if n_classes is None else int(n_classes)
 
         # default config (can be overwritten by kwargs below)
-        if self.backbone in ('unet', 'unetv2'):
-            self.unet_n_depth          = 3
-            self.unet_kernel_size      = 3,3
-            self.unet_n_filter_base    = 32
-            self.unet_n_conv_per_depth = 2
-            self.unet_pool             = 2,2
-            self.unet_activation       = 'relu'
-            self.unet_last_activation  = 'relu'
-            self.unet_batch_norm       = False
-            self.unet_dropout          = 0.0
-            self.unet_prefix           = ''
-            self.net_conv_after_unet   = 128
-        else:
-            # TODO: resnet backbone for 2D model?
-            raise ValueError("backbone '%s' not supported." % self.backbone)
+        self.unet_n_depth          = 3
+        self.unet_kernel_size      = 3,3
+        self.unet_n_filter_base    = 32
+        self.unet_n_conv_per_depth = 2
+        self.unet_pool             = 2,2
+        self.unet_activation       = 'relu'
+        self.unet_last_activation  = 'relu'
+        self.unet_batch_norm       = False
+        self.unet_dropout          = 0.0
+        self.unet_prefix           = ''
+        self.net_conv_after_unet   = 128
 
         # net_mask_shape not needed but kept for legacy reasons
         if backend_channels_last():
@@ -538,14 +534,19 @@ class StarDist2D(StarDistBase):
 
 
     def _axes_div_by(self, query_axes):
-        self.config.backbone in ('unet', 'unetv2') or _raise(NotImplementedError())
-        query_axes = axes_check_and_normalize(query_axes)
-        assert len(self.config.unet_pool) == len(self.config.grid)
-        extra = 2 if self.config.backbone=='unetv2' else 1
-        div_by = dict(zip(
-            self.config.axes.replace('C',''),
-            tuple(extra*p**self.config.unet_n_depth * g for p,g in zip(self.config.unet_pool,self.config.grid))
-        ))
+        if self.config.backbone in ('unet', 'unetv2'):
+            query_axes = axes_check_and_normalize(query_axes)
+            assert len(self.config.unet_pool) == len(self.config.grid)
+            extra = 2 if self.config.backbone=='unetv2' else 1
+            div_by = dict(zip(
+                self.config.axes.replace('C',''),
+                tuple(extra*p**self.config.unet_n_depth * g for p,g in zip(self.config.unet_pool,self.config.grid))
+            ))
+        elif self.config.backbone=='fpn_resnet18':
+            div_by = dict(zip(
+                self.config.axes.replace('C',''),
+                tuple(32 for p,g in zip(self.config.unet_pool,self.config.grid))
+            ))
         
         return tuple(div_by.get(a,1) for a in query_axes)
 
