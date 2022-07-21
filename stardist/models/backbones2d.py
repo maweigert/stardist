@@ -40,7 +40,7 @@ def get_backbone2d(input_img, config):
         backbone = unet_block(**unet_kwargs)(pooled_img)
         backbone = UpSampling2D(global_pool)(backbone)
     elif config.backbone == "fpn_resnet18":
-        backbone = segmentation_models.FPN('resnet18', encoder_weights=None, input_shape=config.net_input_shape, classes=128, activation="linear")(input_img)
+        backbone = segmentation_models.FPN('resnet18', encoder_weights=None, input_shape=config.net_input_shape, pyramid_block_filters=128, classes=128, activation="linear")(input_img)
 
     else: 
         raise KeyError(config.backbone)
