@@ -50,8 +50,10 @@ def get_backbone2d(input_img, config):
         pooled_img = _pool_grid(input_img)
         backbone = segmentation_models.FPN('seresnet18', encoder_weights=None, input_shape=(None,None,config.unet_n_filter_base) if max(config.grid)>1 else (None,None,1), 
                             pyramid_block_filters=128, classes=128, activation="linear")(pooled_img)        
-    elif config.backbone == "linknet":
+    elif config.backbone == "linknet_resnet18":
         backbone = segmentation_models.Linknet('resnet18', encoder_weights=None, input_shape=config.net_input_shape, classes=128, activation="linear")(input_img)
+    elif config.backbone == "linknet_seresnet18":
+        backbone = segmentation_models.Linknet('seresnet18', encoder_weights=None, input_shape=config.net_input_shape, classes=128, activation="linear")(input_img)
     else: 
         raise KeyError(config.backbone)
 

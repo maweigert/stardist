@@ -547,7 +547,7 @@ class StarDist2D(StarDistBase):
                 self.config.axes.replace('C',''),
                 tuple(32 for p,g in zip(self.config.unet_pool,self.config.grid))
             ))
-        elif self.config.backbone=='linknet':
+        elif self.config.backbone in ('linknet_resnet18', 'linknet_seresnet18'):
             div_by = dict(zip(
                 self.config.axes.replace('C',''),
                 tuple(32 for p,g in zip(self.config.unet_pool,self.config.grid))
