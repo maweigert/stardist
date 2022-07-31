@@ -7,7 +7,7 @@ from skimage.draw import polygon
 from csbdeep.utils import _raise
 
 from ..matching import _check_label_array
-from ..lib.stardist2d import c_star_dist,  c_starflow2d_map, c_starflow2d
+from ..lib.stardist2d import c_star_dist, c_starflow2d_map, c_starflow2d,  c_starflow2d_map_float32
 from ..utils import path_absolute, _is_power_of_2, _normalize_grid
 
 
@@ -18,6 +18,13 @@ def starflow2d_map(flow, labels, mask = None, delta=.1, rounds=1, verbose=False)
     else:
         mask = mask.astype(np.int32)
     return c_starflow2d_map(flow.astype(np.float32), labels.astype(np.int32), mask, np.float32(delta), np.int32(rounds), np.int32(verbose))
+
+def starflow2d_map_float32(flow, arr, mask = None, delta=.1, rounds=1, verbose=False):
+    if mask is None:
+        mask = np.ones(arr.shape, np.int32)
+    else:
+        mask = mask.astype(np.int32)
+    return c_starflow2d_map_float32(flow.astype(np.float32), arr.astype(np.float32), mask, np.float32(delta), np.int32(rounds), np.int32(verbose))
 
 def starflow2d(dist, mask):
     return c_starflow2d(dist.astype(np.float32), mask.astype(np.int32))
