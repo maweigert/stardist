@@ -1,4 +1,5 @@
 from __future__ import print_function, unicode_literals, absolute_import, division
+from itertools import product
 
 import numpy as np
 import warnings
@@ -420,3 +421,16 @@ def abspath(root, relpath):
     else:
         path = root.parent/relpath
     return str(path.absolute())
+
+
+def _border_mask(y):
+    """ returns a binary mask of all objects that touch the border""" 
+    idx = [] 
+    for _ in range(y.ndim):
+        idx.extend(np.unique(y[0]).tolist())
+        idx.extend(np.unique(y[-1]).tolist())
+        y = np.moveaxis(y,0,-1)
+    idx = set(idx)-{0}
+    mask = np.zeros(y.shape, np.bool)
+    mask[np.isin(y, tuple(idx))] = True
+    return mask

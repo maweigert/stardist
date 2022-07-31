@@ -37,9 +37,9 @@ def _ocl_star_dist(lbl, n_rays=32, grid=(1,1)):
     return dst.get()
 
 
-def _cpp_star_dist(lbl, n_rays=32, grid=(1,1)):
+def _cpp_star_dist(lbl, n_rays=32, grid=(1,1), mask_border_dist=True):
     (np.isscalar(n_rays) and 0 < int(n_rays)) or _raise(ValueError())
-    return c_star_dist(lbl.astype(np.uint16,copy=False), np.int32(n_rays), np.int32(grid[0]),np.int32(grid[1]))
+    return c_star_dist(lbl.astype(np.uint16,copy=False), np.int32(n_rays), np.int32(grid[0]),np.int32(grid[1]), np.int32(mask_border_dist))
 
 
 def _py_star_dist(a, n_rays=32, grid=(1,1)):
@@ -81,15 +81,20 @@ def _py_star_dist(a, n_rays=32, grid=(1,1)):
     return dst
 
 
-def star_dist(a, n_rays=32, grid=(1,1), mode='cpp'):
-    """'a' assumbed to be a label image with integer values that encode object ids. id 0 denotes background."""
+def star_dist(a, n_rays=32, grid=(1,1), mode='cpp', mask_border_dist=False):
+    """'a' assumbed to be a label image with integer values that encode object ids. id 0 denotes background.
+    if mark_border=True, directions that have hit the border are set to -1
+    """
 
     n_rays >= 3 or _raise(ValueError("need 'n_rays' >= 3"))
+
+    if mask_border_dist and mode != 'cpp':
+        raise NotImplementedError()
 
     if mode == 'python':
         return _py_star_dist(a, n_rays, grid=grid)
     elif mode == 'cpp':
-        return _cpp_star_dist(a, n_rays, grid=grid)
+        return _cpp_star_dist(a, n_rays, grid=grid, mask_border_dist=mask_border_dist)
     elif mode == 'opencl':
         return _ocl_star_dist(a, n_rays, grid=grid)
     else:

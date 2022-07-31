@@ -1,5 +1,6 @@
 import numpy as np
 import segmentation_models
+import tensorflow as tf
 from csbdeep.internals.blocks import unet_block
 from csbdeep.utils.tf import keras_import
 keras = keras_import()
@@ -38,30 +39,49 @@ def get_backbone2d(input_img, config):
         pooled_img = _pool_grid(pooled_img)
         backbone = unet_block(**unet_kwargs)(pooled_img)
         backbone = UpSampling2D(global_pool)(backbone)
+        # backbone = Conv2D(256, 3, padding='same', activation='linear')(backbone)
+    elif config.backbone == "regnetx":
+        pooled_img = _pool_grid(input_img)
+        _inp_channel = config.unet_n_filter_base if max(config.grid)>1 else 1
+        # dummy clall such that internal libs are imported 
+        segmentation_models.Unet('resnet18', encoder_weights=None)
+        base = tf.keras.applications.regnet.RegNetX002(include_top=False, include_preprocessing=False, weights=None, input_shape=(None,None,_inp_channel))
+        features = ("regnetx002_Stage_0_XBlock_0_conv_1x1_1_relu", "regnetx002_Stage_1_XBlock_0_conv_1x1_1_relu", 
+                    "regnetx002_Stage_2_XBlock_0_conv_1x1_1_relu", "regnetx002_Stage_3_XBlock_0_conv_1x1_1_relu")
+        backbone = segmentation_models.models.unet.build_unet(base, 
+                            decoder_block=segmentation_models.models.unet.DecoderUpsamplingX2Block, 
+                            skip_connection_layers=features[::-1],
+                            classes=128, activation='linear')(pooled_img)                
+    elif config.backbone == "unet_efficientnet":
+        pooled_img = _pool_grid(input_img)
+        _inp_channel = config.unet_n_filter_base if max(config.grid)>1 else 1
+        backbone = segmentation_models.Unet('efficientnetb0', encoder_weights=None, input_shape=(None,None,_inp_channel), 
+                            activation='linear', classes=256, decoder_use_batchnorm=False)(pooled_img)        
     elif config.backbone == "fpn_resnet18":
         pooled_img = _pool_grid(input_img)
-        backbone = segmentation_models.FPN('resnet18', encoder_weights=None, input_shape=(None,None,config.unet_n_filter_base) if max(config.grid)>1 else (None,None,1), 
-                            pyramid_block_filters=128, classes=256, activation="elu")(pooled_img)        
+        _inp_channel = config.unet_n_filter_base if max(config.grid)>1 else 1
+        backbone = segmentation_models.FPN('resnet18', encoder_weights=None, input_shape=(None,None,_inp_channel), 
+                            pyramid_block_filters=128, classes=256, activation="linear")(pooled_img)        
     elif config.backbone == "fpn_resnext50":
         pooled_img = _pool_grid(input_img)
-        backbone = segmentation_models.FPN('resnext50', encoder_weights=None, input_shape=(None,None,config.unet_n_filter_base) if max(config.grid)>1 else (None,None,1), 
-                            pyramid_block_filters=128, classes=256, activation="elu")(pooled_img)        
+        _inp_channel = config.unet_n_filter_base if max(config.grid)>1 else 1
+        backbone = segmentation_models.FPN('resnext50', encoder_weights=None, input_shape=(None,None,_inp_channel), 
+                            pyramid_block_filters=128, classes=256, activation="linear")(pooled_img)        
     elif config.backbone == "fpn_seresnet18":
         pooled_img = _pool_grid(input_img)
-        backbone = segmentation_models.FPN('seresnet18', encoder_weights=None, input_shape=(None,None,config.unet_n_filter_base) if max(config.grid)>1 else (None,None,1), 
-                            pyramid_block_filters=128, classes=256, activation="elu")(pooled_img)        
-    elif config.backbone == "fpn_efficb1":
+        _inp_channel = config.unet_n_filter_base if max(config.grid)>1 else 1
+        backbone = segmentation_models.FPN('seresnet18', encoder_weights=None, input_shape=(None,None,_inp_channel), 
+                            pyramid_block_filters=128, classes=256, activation="linear")(pooled_img)        
+    elif config.backbone == "fpn_efficientnet":
         pooled_img = _pool_grid(input_img)
-        backbone = segmentation_models.FPN('efficientnetb1', encoder_weights=None, input_shape=(None,None,config.unet_n_filter_base) if max(config.grid)>1 else (None,None,1), 
-                            pyramid_block_filters=128, classes=256, activation="elu")(pooled_img)        
+        _inp_channel = config.unet_n_filter_base if max(config.grid)>1 else 1
+        backbone = segmentation_models.FPN('efficientnetb0', encoder_weights=None, input_shape=(None,None,_inp_channel), 
+                            pyramid_block_filters=64, classes=128, activation="linear")(pooled_img)        
     elif config.backbone == "fpn_densenet121":
         pooled_img = _pool_grid(input_img)
-        backbone = segmentation_models.FPN('densenet121', encoder_weights=None, input_shape=(None,None,config.unet_n_filter_base) if max(config.grid)>1 else (None,None,1), 
-                            pyramid_block_filters=128, classes=256, activation="elu")(pooled_img)        
-    elif config.backbone == "linknet_resnet18":
-        backbone = segmentation_models.Linknet('resnet18', encoder_weights=None, input_shape=config.net_input_shape, classes=128, activation="linear")(input_img)
-    elif config.backbone == "linknet_seresnet18":
-        backbone = segmentation_models.Linknet('seresnet18', encoder_weights=None, input_shape=config.net_input_shape, classes=128, activation="linear")(input_img)
+        _inp_channel = config.unet_n_filter_base if max(config.grid)>1 else 1
+        backbone = segmentation_models.FPN('densenet121', encoder_weights=None, input_shape=(None,None,_inp_channel), 
+                            pyramid_block_filters=128, classes=256, activation="linear")(pooled_img)        
     else: 
         raise KeyError(config.backbone)
 

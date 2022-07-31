@@ -99,18 +99,21 @@ def masked_metric_iou(mask, reg_weight=0, norm_by_mask=True):
     return generic_masked_loss(mask, iou_metric, reg_weight=reg_weight, norm_by_mask=norm_by_mask)
 
 
-def weighted_bce_loss(extra_weight=10, threshold=1e-5):
-    _loss_func = tf.keras.losses.BinaryCrossentropy(reduction='none')
+def mask_weighted_loss(loss_func, extra_weight=10, threshold=1e-5):
     def _weighted_bce_loss(y_true, y_pred):
         mask = tf.cast(y_true[...,0]>=threshold, tf.float32)
-        loss = _loss_func(y_true, y_pred)
-        loss = (1+mask*extra_weight)*loss
+        loss = loss_func(y_true, y_pred)
+        _weight_mask = (1+mask*extra_weight)
+        loss = _weight_mask*loss
         return loss
     return _weighted_bce_loss
 
-def disable_border_loss(loss_func, border=3):
+def disable_border_loss(loss_func, border=3, threshold=1e-5):
     ss = (slice(None),) + tuple(slice(border, -border) if border is not None else slice(None) for _ in range(2))
     def cropped_loss(y_true, y_pred):
+        # mask = tf.cast(y_true>=threshold, tf.float32)
+        # mask[ss] = 0 
+        # mask = 1 - mask
         return loss_func(y_true, y_pred)[ss]
     return cropped_loss
 
@@ -319,15 +322,22 @@ class StarDistBase(BaseModel):
                             'iou': masked_loss_iou,
                             }[self.config.train_dist_loss]
         
-        prob_loss = weighted_bce_loss(extra_weight=5, threshold=1e-5)
+        # _prob_loss = mask_weighted_loss(tf.keras.losses.BinaryCrossentropy(reduction='none'), extra_weight=5, threshold=1e-5)
+        # _prob_loss = mask_weighted_loss(tf.keras.losses.MeanAbsoluteError(reduction='none'), extra_weight=5, threshold=1e-5)
+        # _prob_loss = mask_weighted_loss(tf.keras.losses.Huber(delta=.1, reduction='none'), extra_weight=5, threshold=1e-5)
+        # _prob_loss = mask_weighted_loss(tf.keras.losses.MeanSquaredError(reduction='none'), extra_weight=5, threshold=1e-5)
+        _prob_loss = tf.keras.losses.MeanAbsoluteError(reduction='none')
+        # _prob_loss = tf.keras.losses.BinaryCrossentropy(reduction='none')
         
-        if self.config.train_ignore_border is not None and self.config.train_ignore_border>0:
-            print(f'prob loss: ignoring border of size {self.config.train_ignore_border}')
-            prob_loss = disable_border_loss(prob_loss, border=self.config.train_ignore_border)
+        def split_prob_true_mask(dist_true_mask):
+            return tf.split(dist_true_mask, num_or_size_splits=[1,1], axis=-1)
 
+        def prob_loss(prob_true_mask, prob_pred):
+            prob_true, prob_mask = split_prob_true_mask(prob_true_mask)
+            return masked_loss_mae(prob_mask)(prob_true, prob_pred)
 
         def split_dist_true_mask(dist_true_mask):
-            return tf.split(dist_true_mask, num_or_size_splits=[self.config.n_rays,-1], axis=-1)
+            return tf.split(dist_true_mask, num_or_size_splits=[self.config.n_rays,self.config.n_rays], axis=-1)
 
         def dist_loss(dist_true_mask, dist_pred):
             dist_true, dist_mask = split_dist_true_mask(dist_true_mask)

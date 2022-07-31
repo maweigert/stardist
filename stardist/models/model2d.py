@@ -20,7 +20,7 @@ Model = keras_import('models', 'Model')
 
 from .base import StarDistBase, StarDistDataBase, _tf_version_at_least
 from ..sample_patches import sample_patches
-from ..utils import edt_prob, _normalize_grid, mask_to_categorical, _flow_prob_edt
+from ..utils import edt_prob, _normalize_grid, mask_to_categorical, _flow_prob_edt, _border_mask
 from ..geometry import star_dist, dist_to_coord, polygons_to_label
 from ..nms import non_maximum_suppression, non_maximum_suppression_sparse
 from .backbones2d import get_backbone2d
@@ -31,6 +31,7 @@ class StarDistData2D(StarDistDataBase):
                  n_classes=None, classes=None,
                  patch_size=(256,256), b=32, grid=(1,1), shape_completion=False, augmenter=None, foreground_prob=0, 
                  prob_mode='edt',
+                 ignore_border=False,
                  **kwargs):
 
         super().__init__(X=X, Y=Y, n_rays=n_rays, grid=grid,
@@ -46,6 +47,10 @@ class StarDistData2D(StarDistDataBase):
 
         self.sd_mode = 'opencl' if self.use_gpu else 'cpp'
         self.prob_mode = prob_mode
+        self.ignore_border=ignore_border
+
+        if self.ignore_border:
+            print(f'ignoring border')
 
     def __getitem__(self, i):
         idx = self.batch(i)
@@ -68,9 +73,9 @@ class StarDistData2D(StarDistDataBase):
             raise NotImplementedError('fix flow prob first!')
         else:
             # directly subsample with grid
-            dist      = np.stack([star_dist(lbl,self.n_rays,mode=self.sd_mode, grid=self.grid) for lbl in Y])
+            dist      = np.stack([star_dist(lbl,self.n_rays,mode=self.sd_mode, grid=self.grid, mask_border_dist=self.ignore_border) for lbl in Y])
             dist_mask = np.stack([(lbl[self.ss_grid[1:3]]>0).astype(np.float32) for lbl in Y])
-
+            dist_mask = np.expand_dims(dist_mask, -1) * (dist!=-1) # mask out border dist 
         if self.prob_mode=='edt':
             prob      = np.stack([edt_prob(lbl[self.b][self.ss_grid[1:3]]) for lbl in Y])
         elif self.prob_mode=='flow':
@@ -78,11 +83,16 @@ class StarDistData2D(StarDistDataBase):
         else: 
             raise ValueError(f'unknown prob mode {self.prob_mode} !')
 
+        prob_mask = np.ones_like(prob)
+        if self.ignore_border:
+            prob_mask *= 1-np.stack([_border_mask(lbl[self.b][self.ss_grid[1:3]]) for lbl in Y]) 
+            
+        prob_mask = np.expand_dims(prob_mask,-1)
+
         X = np.stack(X)
         if X.ndim == 3: # input image has no channel axis
             X = np.expand_dims(X,-1)
         prob = np.expand_dims(prob,-1)
-        dist_mask = np.expand_dims(dist_mask,-1)
 
         # subsample wth given grid
         # dist_mask = dist_mask[self.ss_grid]
@@ -91,13 +101,15 @@ class StarDistData2D(StarDistDataBase):
         # append dist_mask to dist as additional channel
         # dist_and_mask = np.concatenate([dist,dist_mask],axis=-1)
         # faster than concatenate
-        dist_and_mask = np.empty(dist.shape[:-1]+(self.n_rays+1,), np.float32)
-        dist_and_mask[...,:-1] = dist
-        dist_and_mask[...,-1:] = dist_mask
+        dist_and_mask = np.empty(dist.shape[:-1]+(2*self.n_rays,), np.float32)
+        dist_and_mask[...,:self.n_rays] = dist
+        dist_and_mask[...,self.n_rays:] = dist_mask
 
+        prob_and_mask = np.concatenate((prob, prob_mask), axis=-1)
+    
 
         if self.n_classes is None:
-            return [X], [prob,dist_and_mask]
+            return [X], [prob_and_mask,dist_and_mask]
         else:
             prob_class = np.stack(tuple((mask_to_categorical(y, self.n_classes, self.classes[k]) for y,k in zip(Y, idx))))
 
@@ -106,7 +118,7 @@ class StarDistData2D(StarDistDataBase):
             # 'zoom' might lead to better registered maps (especially if upscaled later)
             prob_class = zoom(prob_class, (1,)+tuple(1/g for g in self.grid)+(1,), order=0)
 
-            return [X], [prob,dist_and_mask, prob_class]
+            return [X], [prob_and_mask,dist_and_mask, prob_class]
 
 
 
@@ -228,7 +240,7 @@ class Config2D(BaseConfig):
         self.train_foreground_only     = 0.9
         self.train_sample_cache        = True
         self.train_prob_mode           = 'edt'  # 'edt' or 'flow'
-        self.train_ignore_border       = 5
+        self.train_ignore_border       = False
 
         self.train_dist_loss           = 'mae'
         self.train_loss_weights        = (1,0.2) if self.n_classes is None else (1,0.2,1)
@@ -301,29 +313,77 @@ class StarDist2D(StarDistBase):
     def _build(self):
         input_img = Input(self.config.net_input_shape, name='input')
 
-        backbone = get_backbone2d(input_img, self.config)
 
-        feat_prob = Conv2D(self.config.net_conv_after_unet, self.config.unet_kernel_size, 
-                padding='same', activation = self.config.unet_activation)(backbone)
-
-        # for backwards compatibility 
-        if self.config.backbone=='unet':
-            feat_dist = feat_prob 
-        else:    
-            feat_dist = Conv2D(self.config.net_conv_after_unet, self.config.unet_kernel_size, 
-                            padding='same', activation = self.config.unet_activation)(backbone)
-
-        output_prob = Conv2D(1, (1,1), name='prob', padding='same', activation='sigmoid')(feat_prob)
-        output_dist = Conv2D(self.config.n_rays, (1,1), name='dist', padding='same', activation='linear')(feat_dist)
-
-        # attach extra classification head when self.n_classes is given
-        if self._is_multiclass():
-            feat_prob_class  = Conv2D(self.config.net_conv_after_unet, self.config.unet_kernel_size,
-                                     padding='same', activation=self.config.unet_activation)(backbone)
+        if self.config.backbone=='fpn':
+            import tensorflow as tf 
+            from .fpn_net import build_fpn 
+            base = tf.keras.applications.EfficientNetV2B0(weights=None, input_shape=(None,None,1), include_top=False, include_preprocessing=False)
+            resolutions =  'block5e_add', 'block3b_add', 'block2b_add',  'block1a_project_activation' 
+            kwargs = dict(segmentation_filters=32, pyramid_filters=64, aggregation='cat')
+            feat_prob = build_fpn(base, resolutions, multiply_factor=False, prefix='1', **kwargs)
+            feat_prob = UpSampling2D(2,interpolation='bilinear')(feat_prob)
+            feat_dist = build_fpn(base, resolutions, multiply_factor=True, prefix='2', **kwargs)
+            feat_dist = UpSampling2D(2,interpolation='bilinear')(feat_dist)
+            feat_prob_class = build_fpn(base, resolutions, multiply_factor=False, prefix='3', **kwargs)
+            feat_prob_class = UpSampling2D(2,interpolation='bilinear')(feat_prob_class)
+            
+            output_dist = Conv2D(self.config.n_rays, (1,1), name='dist', padding='same', activation='linear')(feat_dist)
+            output_prob = Conv2D(1, (1,1), name='prob', padding='same', activation='sigmoid')(feat_prob)
             output_prob_class  = Conv2D(self.config.n_classes+1, (1,1), name='prob_class', padding='same', activation='softmax')(feat_prob_class)
-            return Model([input_img], [output_prob,output_dist,output_prob_class])
+            return Model(base.inputs, [output_prob,output_dist,output_prob_class])
+
+        elif self.config.backbone=='regnetx':
+            from ._regnet import UnetDecoderRegnetx, RegNetX002, RegNetX001
+
+            base = RegNetX001(input_shape=(None,None,1), norm='ln',  include_top=False, stem_strides=1)
+
+            # backbone = UnetDecoderRegnetx(classes=128,activation='linear', norm='ln', name='backbone')(base)
+            # feat_prob = Conv2D(self.config.net_conv_after_unet, self.config.unet_kernel_size, 
+            #                     padding='same', activation = self.config.unet_activation)(backbone)
+            # feat_dist = Conv2D(self.config.net_conv_after_unet, self.config.unet_kernel_size, 
+            #                     padding='same', activation = self.config.unet_activation)(backbone)
+            # feat_prob_class  = Conv2D(self.config.net_conv_after_unet, self.config.unet_kernel_size,
+            #                     padding='same', activation=self.config.unet_activation)(backbone)
+            
+            # output_dist = Conv2D(self.config.n_rays, (1,1), name='dist', padding='same', activation='linear')(feat_dist)
+            # output_prob = Conv2D(1, (1,1), name='prob', padding='same', activation='sigmoid')(feat_prob)
+            # output_prob_class  = Conv2D(self.config.n_classes+1, (1,1), name='prob_class', padding='same', activation='softmax')(feat_prob_class)
+
+            output_prob       = UnetDecoderRegnetx(classes=1,activation='sigmoid', norm='ln', name='prob')(base)
+            output_dist       = UnetDecoderRegnetx(classes=self.config.n_rays,activation='linear', norm='ln', name='dist')(base)
+            output_prob_class = UnetDecoderRegnetx(classes=self.config.n_classes+1,activation='softmax', norm='ln', name='prob_class')(base)
+
+            return Model(base.inputs, [output_prob,output_dist,output_prob_class])            
         else:
-            return Model([input_img], [output_prob,output_dist])
+            # the backbone network from which all heads derive their features from
+            backbone = get_backbone2d(input_img, self.config)
+
+            # 1. probability head
+            feat_prob = Conv2D(self.config.net_conv_after_unet, self.config.unet_kernel_size, 
+                    padding='same', activation = self.config.unet_activation)(backbone)
+            
+
+            # 2. distance head 
+            if self.config.backbone=='unet':
+                # for backwards compatibility
+                feat_dist = feat_prob 
+            else:    
+                feat_dist = Conv2D(self.config.net_conv_after_unet, self.config.unet_kernel_size, 
+                                padding='same', activation = self.config.unet_activation)(backbone)
+            
+            output_dist = Conv2D(self.config.n_rays, (1,1), name='dist', padding='same', activation='linear')(feat_dist)
+
+            # output_prob = Conv2D(1, (1,1), name='prob', padding='same', activation='sigmoid')(feat_prob)
+            output_prob = Conv2D(1, (1,1), name='prob', padding='same', activation='linear')(feat_prob)
+
+            # 3. prob class head (if multiclass)
+            if self._is_multiclass():
+                feat_prob_class  = Conv2D(self.config.net_conv_after_unet, self.config.unet_kernel_size,
+                                        padding='same', activation=self.config.unet_activation)(backbone)
+                output_prob_class  = Conv2D(self.config.n_classes+1, (1,1), name='prob_class', padding='same', activation='softmax')(feat_prob_class)
+                return Model([input_img], [output_prob,output_dist,output_prob_class])
+            else:
+                return Model([input_img], [output_prob,output_dist])
 
 
     def train(self, X, Y, validation_data, classes='auto', augmenter=None, seed=None, epochs=None, steps_per_epoch=None, workers=1):
@@ -405,7 +465,8 @@ class StarDist2D(StarDistBase):
             foreground_prob  = self.config.train_foreground_only,
             n_classes        = self.config.n_classes,
             sample_ind_cache = self.config.train_sample_cache,
-            prob_mode        = self.config.train_prob_mode
+            prob_mode        = self.config.train_prob_mode,
+            ignore_border    = self.config.train_ignore_border
         )
 
         # generate validation data and store in numpy arrays
@@ -420,14 +481,17 @@ class StarDist2D(StarDistBase):
                                          augmenter=augmenter, length=epochs*steps_per_epoch, **data_kwargs)
 
         if self.config.train_tensorboard:
-            # show dist for three rays
-            _n = min(3, self.config.n_rays)
             channel = axes_dict(self.config.axes)['C']
             output_slices = [[slice(None)]*4,[slice(None)]*4]
+            # extract prob mask 
+            output_slices[0][1+channel] = slice(0,1)
+            # show dist for three rays
+            _n = min(3, self.config.n_rays)
             output_slices[1][1+channel] = slice(0,(self.config.n_rays//_n)*_n, self.config.n_rays//_n)
             if self._is_multiclass():
                 _n = min(3, self.config.n_classes)
                 output_slices += [[slice(None)]*4]
+                output_slices[0][1+channel] = slice(0,1)
                 output_slices[2][1+channel] = slice(1,1+(self.config.n_classes//_n)*_n, self.config.n_classes//_n)
 
             if IS_TF_1:

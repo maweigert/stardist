@@ -65,9 +65,10 @@ static PyObject* c_star_dist (PyObject *self, PyObject *args) {
   PyArrayObject *src = NULL;
   PyArrayObject *dst = NULL;
   int n_rays;
+  int mask_border_dist;
   int grid_x, grid_y;
 
-  if (!PyArg_ParseTuple(args, "O!iii", &PyArray_Type, &src, &n_rays, &grid_y, &grid_x))
+  if (!PyArg_ParseTuple(args, "O!iiii", &PyArray_Type, &src, &n_rays, &grid_y, &grid_x, &mask_border_dist))
     return NULL;
 
   npy_intp *dims = PyArray_DIMS(src);
@@ -108,10 +109,14 @@ static PyObject* c_star_dist (PyObject *self, PyObject *args) {
             y += dy;
             const int ii = round_to_int(i*grid_y+x), jj = round_to_int(j*grid_x+y);
             // stop if out of bounds or reaching a pixel with a different value/id
-            if (ii < 0 || ii >= dims[0] ||
-                jj < 0 || jj >= dims[1] ||
-                value != *(unsigned short *)PyArray_GETPTR2(src,ii,jj))
-              {
+            const bool out_of_border = i < 0 || ii >= dims[0] || jj < 0 || jj >= dims[1];
+
+            if ((out_of_border) && (mask_border_dist)){
+                *(float *)PyArray_GETPTR3(dst,i,j,k) = -1;
+                break;
+            }
+
+            if (out_of_border || value != *(unsigned short *)PyArray_GETPTR2(src,ii,jj)){
                 // small correction as we overshoot the boundary
                 const float t_corr = .5f/fmax(fabs(dx),fabs(dy));
                 x += (t_corr-1.f)*dx;
@@ -120,6 +125,7 @@ static PyObject* c_star_dist (PyObject *self, PyObject *args) {
                 *(float *)PyArray_GETPTR3(dst,i,j,k) = dist;
                 break;
               }
+            
           }
 
         }
