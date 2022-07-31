@@ -9,7 +9,7 @@ from tqdm import tqdm
 from collections import defaultdict
 from zipfile import ZipFile, ZIP_DEFLATED
 from scipy.ndimage.morphology import distance_transform_edt, binary_fill_holes
-from scipy.ndimage.measurements import find_objects
+from scipy.ndimage.measurements import find_objects, center_of_mass
 from scipy.optimize import minimize_scalar
 from skimage.measure import regionprops
 from csbdeep.utils import _raise
@@ -126,7 +126,10 @@ def _edt_prob_scipy(lbl_img, anisotropy=None):
     return prob
 
 
-def _flow_prob_edt(lbl_img, dist, decay=10, anisotropy=None):
+def _flow_prob_edt(lbl_img, dist, decay=20, anisotropy=None):
+    """ probability map for each instance 
+    Its constructed from the distance transform and the norm of the stardist flow map
+    """
     from .geometry import starflow2d
     if anisotropy is not None:
         raise NotImplementedError(anisotropy)
@@ -145,13 +148,48 @@ def _flow_prob_edt(lbl_img, dist, decay=10, anisotropy=None):
         sl = r.slice
         if sl is None: continue
         _mask = lbl_img[sl]==r.label
+        # flow mag normalized to 0...1
         f = mag_flow[sl][_mask] 
         f = f-np.min(f)
         f = f/(np.max(f)+1e-5) 
+        # add decay and multiply with distance transform 
         f = np.exp(-decay*f**2) * prob[sl][_mask] 
         f = f/(np.max(f)+1e-5) 
         # prob[sl][_mask] = np.exp(-decay*f**2)        
         prob[sl][_mask] = f
+    return prob
+
+def _centroid_prob_edt(lbl_img, anisotropy=None):
+    """Perform EDT on each labeled object and normalize.
+    Internally uses https://github.com/seung-lab/euclidean-distance-transform-3d
+    that can handle multiple labels at once
+    """
+    lbl_img = np.ascontiguousarray(lbl_img)
+    constant_img = lbl_img.min() == lbl_img.max() and lbl_img.flat[0] > 0
+    if constant_img:
+        warnings.warn("EDT of constant label image is ill-defined. (Assuming background around it.)")
+    # we just need to compute the edt once but then normalize it for each object
+    prob_edt = edt(lbl_img, anisotropy=anisotropy, black_border=constant_img, parallel=True)
+    prob = np.zeros(lbl_img.shape, np.float32)
+    objects = find_objects(lbl_img)
+    
+    for i,sl in enumerate(objects,1):
+        # i: object label id, sl: slices of object in lbl_img
+        if sl is None: continue
+        _mask = lbl_img[sl]==i
+
+        points = np.ones_like(lbl_img[sl])
+        cm = center_of_mass(prob_edt[sl], labels=lbl_img[sl], index=i)
+        points[int(cm[0]), int(cm[1])] = 0
+        _dist_trafo = edt(points)
+        _dist_trafo[~_mask] = np.nan 
+        closest = np.unravel_index(np.nanargmin(_dist_trafo), _dist_trafo.shape)
+        points[int(cm[0]), int(cm[1])] = 1
+        points[int(closest[0]), int(closest[1])] = 0 
+        _dist_trafo = edt(points) 
+        _dist_trafo /= prob_edt[sl][_mask].max()
+
+        prob[sl][_mask] = np.exp(-5*_dist_trafo[_mask])
     return prob
 
 def _fill_label_holes(lbl_img, **kwargs):

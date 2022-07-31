@@ -20,7 +20,7 @@ Model = keras_import('models', 'Model')
 
 from .base import StarDistBase, StarDistDataBase, _tf_version_at_least
 from ..sample_patches import sample_patches
-from ..utils import edt_prob, _normalize_grid, mask_to_categorical, _flow_prob_edt, _border_mask
+from ..utils import edt_prob, _normalize_grid, mask_to_categorical, _flow_prob_edt, _border_mask, _centroid_prob_edt
 from ..geometry import star_dist, dist_to_coord, polygons_to_label
 from ..nms import non_maximum_suppression, non_maximum_suppression_sparse
 from .backbones2d import get_backbone2d
@@ -80,6 +80,8 @@ class StarDistData2D(StarDistDataBase):
             prob      = np.stack([edt_prob(lbl[self.b][self.ss_grid[1:3]]) for lbl in Y])
         elif self.prob_mode=='flow':
             prob      = np.stack([_flow_prob_edt(_lbl[self.ss_grid[1:3]], _dist) for _lbl, _dist in zip(Y, dist)])
+        elif self.prob_mode=='centroid':
+            prob      = np.stack([_centroid_prob_edt(_lbl[self.ss_grid[1:3]]) for _lbl, _dist in zip(Y, dist)])
         else: 
             raise ValueError(f'unknown prob mode {self.prob_mode} !')
 
