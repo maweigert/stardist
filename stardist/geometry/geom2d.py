@@ -1,8 +1,11 @@
 from __future__ import print_function, unicode_literals, absolute_import, division
+from multiprocessing.sharedctypes import Value
 import numpy as np
 import warnings
 
+import scipy.ndimage as ndi
 from skimage.measure import regionprops
+from skimage.morphology import remove_small_holes
 from skimage.draw import polygon
 from csbdeep.utils import _raise
 
@@ -12,12 +15,12 @@ from ..utils import path_absolute, _is_power_of_2, _normalize_grid
 
 
 
-def starflow2d_map(flow, labels, mask = None, delta=.1, rounds=1, verbose=False):
+def starflow2d_map(flow, labels, mask = None, delta=.1, rounds=1, preserve_labels:bool = False, verbose=False):
     if mask is None:
         mask = np.ones(labels.shape, np.int32)
     else:
         mask = mask.astype(np.int32)
-    return c_starflow2d_map(flow.astype(np.float32), labels.astype(np.int32), mask, np.float32(delta), np.int32(rounds), np.int32(verbose))
+    return c_starflow2d_map(flow.astype(np.float32), labels.astype(np.int32), mask, np.float32(delta), np.int32(rounds), np.int32(preserve_labels), np.int32(verbose))
 
 def starflow2d_map_float32(flow, arr, mask = None, delta=.1, rounds=1, verbose=False):
     if mask is None:
@@ -36,6 +39,34 @@ def starflow2d_map_length(flow, mask = None, delta=.1, rounds=1, verbose=False):
 def starflow2d(dist, mask):
     return c_starflow2d(dist.astype(np.float32), mask.astype(np.int32))
 
+
+def _keep_largest_component(y:np.ndarray, area_threshold:int=0):
+    # for each label only keep the largest component 
+    out = np.zeros_like(y)
+    for r in regionprops(y):
+        mask = y[r.slice]==r.label 
+        if area_threshold>0: 
+            mask = remove_small_holes(np.pad(mask,1), area_threshold=area_threshold)[1:-1,1:-1]
+        relabeled = ndi.label(mask)[0]
+        idx_largest = np.argmax(np.bincount(relabeled[mask].flatten()))
+        out[r.slice][relabeled==idx_largest] = r.label 
+    return out
+
+def refine2d(labels:np.ndarray, mask: np.ndarray=None, delta:float= 0.1, rounds:int = 50, 
+            dist:np.ndarray = None, flow:np.ndarray=None,
+            preserve_labels:bool = False, keep_only_largest:bool=True, area_threshold:int = 16):
+    if flow is None:
+        if dist is None:
+            raise ValueError('need to provide dist if flow is None!')
+        flow = starflow2d(dist, mask)
+    assert flow.ndim==3 and flow.shape[-1]==2
+    y = starflow2d_map(flow, labels, mask=mask, delta=delta, rounds=rounds,
+                            preserve_labels =preserve_labels, verbose=False)
+
+    if keep_only_largest:
+        y = _keep_largest_component(y, area_threshold=area_threshold)
+
+    return y 
 
 def _ocl_star_dist(lbl, n_rays=32, grid=(1,1)):
     from gputools import OCLProgram, OCLArray, OCLImage

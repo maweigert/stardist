@@ -638,11 +638,11 @@ static PyObject *c_starflow2d_map(PyObject *self, PyObject *args)
     PyArrayObject *labels = NULL;
     PyArrayObject *dst = NULL;
 
-    int verbose, rounds;
+    int verbose, rounds, preserve_labels;
     float delta;
 
-    if (!PyArg_ParseTuple(args, "O!O!O!fii", &PyArray_Type, &flow, &PyArray_Type, &labels, &PyArray_Type, &mask, 
-                          &delta, &rounds, &verbose))
+    if (!PyArg_ParseTuple(args, "O!O!O!fiii", &PyArray_Type, &flow, &PyArray_Type, &labels, &PyArray_Type, &mask, 
+                          &delta, &rounds, &preserve_labels, &verbose))
         return NULL;
 
     npy_intp *dims = PyArray_DIMS(flow);
@@ -664,8 +664,15 @@ static PyObject *c_starflow2d_map(PyObject *self, PyObject *args)
 
             // *(int *)PyArray_GETPTR2(dst, i, j) = 0;
 
-            const int value = *(int *)PyArray_GETPTR2(mask, i, j);
-            if (value == 0)
+            const int mask_value = *(int *)PyArray_GETPTR2(mask, i, j);
+            const int initial_label = *(int *)PyArray_GETPTR2(labels, i, j);
+
+            if ((preserve_labels) && (initial_label !=0)){
+                *(int *)PyArray_GETPTR2(dst, i, j) = initial_label;
+                continue;
+            }
+
+            if (mask_value == 0)
             {
                 *(int *)PyArray_GETPTR2(dst, i, j) = 0;
             }
@@ -692,7 +699,7 @@ static PyObject *c_starflow2d_map(PyObject *self, PyObject *args)
 
                 *(int *)PyArray_GETPTR2(dst, i, j) = *(int *)PyArray_GETPTR2(labels, i2,j2 );
 
-                // *(int *)PyArray_GETPTR2(dst, i2, j2) = 1; 
+            
             }
         }
     }
