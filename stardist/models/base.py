@@ -337,7 +337,7 @@ class StarDistBase(BaseModel):
             return masked_loss_mae(prob_mask)(prob_true, prob_pred)
 
         def split_dist_true_mask(dist_true_mask):
-            return tf.split(dist_true_mask, num_or_size_splits=[self.config.n_rays,self.config.n_rays], axis=-1)
+            return tf.split(dist_true_mask, num_or_size_splits=[self.config.n_rays,1], axis=-1)
 
         def dist_loss(dist_true_mask, dist_pred):
             dist_true, dist_mask = split_dist_true_mask(dist_true_mask)

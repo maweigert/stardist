@@ -75,7 +75,7 @@ class StarDistData2D(StarDistDataBase):
             # directly subsample with grid
             dist      = np.stack([star_dist(lbl,self.n_rays,mode=self.sd_mode, grid=self.grid, mask_border_dist=self.ignore_border) for lbl in Y])
             dist_mask = np.stack([(lbl[self.ss_grid[1:3]]>0).astype(np.float32) for lbl in Y])
-            dist_mask = np.expand_dims(dist_mask, -1) * (dist!=-1) # mask out border dist 
+            dist_mask = np.expand_dims(dist_mask, -1)
         if self.prob_mode=='edt':
             prob      = np.stack([edt_prob(lbl[self.b][self.ss_grid[1:3]]) for lbl in Y])
         elif self.prob_mode=='flow':
@@ -101,7 +101,7 @@ class StarDistData2D(StarDistDataBase):
         # append dist_mask to dist as additional channel
         # dist_and_mask = np.concatenate([dist,dist_mask],axis=-1)
         # faster than concatenate
-        dist_and_mask = np.empty(dist.shape[:-1]+(2*self.n_rays,), np.float32)
+        dist_and_mask = np.empty(dist.shape[:-1]+(self.n_rays+1,), np.float32)
         dist_and_mask[...,:self.n_rays] = dist
         dist_and_mask[...,self.n_rays:] = dist_mask
 

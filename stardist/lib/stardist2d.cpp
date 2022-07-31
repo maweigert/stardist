@@ -109,7 +109,7 @@ static PyObject* c_star_dist (PyObject *self, PyObject *args) {
             y += dy;
             const int ii = round_to_int(i*grid_y+x), jj = round_to_int(j*grid_x+y);
             // stop if out of bounds or reaching a pixel with a different value/id
-            const bool out_of_border = i < 0 || ii >= dims[0] || jj < 0 || jj >= dims[1];
+            const bool out_of_border = (i < 0 || ii >= dims[0] || jj < 0 || jj >= dims[1]);
 
             if ((out_of_border) && (mask_border_dist)){
                 *(float *)PyArray_GETPTR3(dst,i,j,k) = -1;
