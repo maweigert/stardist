@@ -871,6 +871,11 @@ static PyObject *c_starflow2d(PyObject *self, PyObject *args)
 
     dst = (PyArrayObject *)PyArray_SimpleNew(3, dims_dst, NPY_FLOAT);
 
+#ifdef __APPLE__    
+#pragma omp parallel for 
+#else
+#pragma omp parallel for schedule(dynamic) 
+#endif
     for (int i = 0; i < dims[0]; i++)
     {
         for (int j = 0; j < dims[1]; j++)
