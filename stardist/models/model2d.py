@@ -13,12 +13,14 @@ from skimage.measure import regionprops
 from scipy.ndimage import zoom
 from distutils.version import LooseVersion
 
+import tensorflow as tf
 keras = keras_import()
 K = keras_import('backend')
 Input, Conv2D, MaxPooling2D, UpSampling2D = keras_import('layers', 'Input', 'Conv2D', 'MaxPooling2D', 'UpSampling2D')
 Model = keras_import('models', 'Model')
 
 from .base import StarDistBase, StarDistDataBase, _tf_version_at_least
+from .tfdata_wrapper import wrap_stardistdata_as_tfdata
 from ..sample_patches import sample_patches
 from ..utils import edt_prob, _normalize_grid, mask_to_categorical, _flow_prob_edt, _border_mask, _centroid_prob_edt
 from ..geometry import star_dist, dist_to_coord, polygons_to_label
@@ -479,8 +481,15 @@ class StarDist2D(StarDistBase):
         data_val = _data_val[0]
 
         # expose data generator as member for general diagnostics
-        self.data_train = StarDistData2D(X, Y, classes=classes, batch_size=self.config.train_batch_size,
-                                         augmenter=augmenter, length=epochs*steps_per_epoch, **data_kwargs)
+        data_train_stardist = StarDistData2D(X, Y, classes=classes, batch_size=1, augmenter=augmenter, 
+                                         length=epochs*self.config.train_batch_size*steps_per_epoch, **data_kwargs)
+
+
+
+        self.data_train = wrap_stardistdata_as_tfdata(data_train_stardist,
+                                shuffle=True, num_parallel_calls=workers)
+        self.data_train = self.data_train.batch(self.config.train_batch_size, drop_remainder=False)
+        self.data_train = self.data_train.prefetch(workers)
 
         if self.config.train_tensorboard:
             channel = axes_dict(self.config.axes)['C']
@@ -510,7 +519,6 @@ class StarDist2D(StarDistBase):
         fit = self.keras_model.fit_generator if IS_TF_1 else self.keras_model.fit
         history = fit(iter(self.data_train), validation_data=data_val,
                       epochs=epochs, steps_per_epoch=steps_per_epoch,
-                      workers=workers, use_multiprocessing=workers>1,
                       callbacks=self.callbacks, verbose=1,
                       # set validation batchsize to training batchsize (only works for tf >= 2.2)
                       **(dict(validation_batch_size = self.config.train_batch_size) if _tf_version_at_least("2.2.0") else {}))
