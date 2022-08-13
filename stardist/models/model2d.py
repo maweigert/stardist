@@ -245,6 +245,7 @@ class Config2D(BaseConfig):
         self.train_sample_cache        = True
         self.train_prob_mode           = 'edt'  # 'edt' or 'flow'
         self.train_ignore_border       = False
+        self.train_prob_loss           = 'bce'
 
         self.train_dist_loss           = 'mae'
         self.train_loss_weights        = (1,0.2) if self.n_classes is None else (1,0.2,1)
@@ -377,8 +378,8 @@ class StarDist2D(StarDistBase):
             
             output_dist = Conv2D(self.config.n_rays, (1,1), name='dist', padding='same', activation='linear')(feat_dist)
 
-            # output_prob = Conv2D(1, (1,1), name='prob', padding='same', activation='sigmoid')(feat_prob)
-            output_prob = Conv2D(1, (1,1), name='prob', padding='same', activation='linear')(feat_prob)
+            prob_act = {'bce':'sigmoid', 'mae':'linear'}[self.config.train_prob_loss]
+            output_prob = Conv2D(1, (1,1), name='prob', padding='same', activation=prob_act)(feat_prob)
 
             # 3. prob class head (if multiclass)
             if self._is_multiclass():

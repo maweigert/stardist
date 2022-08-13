@@ -51,6 +51,9 @@ def masked_loss(mask, penalty, reg_weight, norm_by_mask):
 #       previous 2D behavior was norm_by_mask=False
 #       same question for reg_weight? use 1e-4 (as in 3D) or 0 (as in 2D)?
 
+def masked_loss_bce(mask, reg_weight=0, norm_by_mask=True):
+    return generic_masked_loss(mask, K.binary_crossentropy, reg_weight=reg_weight, norm_by_mask=norm_by_mask)
+
 def masked_loss_mae(mask, reg_weight=0, norm_by_mask=True):
     return masked_loss(mask, K.abs, reg_weight=reg_weight, norm_by_mask=norm_by_mask)
 
@@ -322,19 +325,15 @@ class StarDistBase(BaseModel):
                             'iou': masked_loss_iou,
                             }[self.config.train_dist_loss]
         
-        # _prob_loss = mask_weighted_loss(tf.keras.losses.BinaryCrossentropy(reduction='none'), extra_weight=5, threshold=1e-5)
-        # _prob_loss = mask_weighted_loss(tf.keras.losses.MeanAbsoluteError(reduction='none'), extra_weight=5, threshold=1e-5)
-        # _prob_loss = mask_weighted_loss(tf.keras.losses.Huber(delta=.1, reduction='none'), extra_weight=5, threshold=1e-5)
-        # _prob_loss = mask_weighted_loss(tf.keras.losses.MeanSquaredError(reduction='none'), extra_weight=5, threshold=1e-5)
-        _prob_loss = tf.keras.losses.MeanAbsoluteError(reduction='none')
-        # _prob_loss = tf.keras.losses.BinaryCrossentropy(reduction='none')
+        masked_prob_loss = {'bce': masked_loss_bce,
+                            'mae' : masked_loss_mae}[self.config.train_prob_loss]
         
-        def split_prob_true_mask(dist_true_mask):
-            return tf.split(dist_true_mask, num_or_size_splits=[1,1], axis=-1)
+        def split_prob_true_mask(prob_true_mask):
+            return tf.split(prob_true_mask, num_or_size_splits=[1,1], axis=-1)
 
         def prob_loss(prob_true_mask, prob_pred):
             prob_true, prob_mask = split_prob_true_mask(prob_true_mask)
-            return masked_loss_mae(prob_mask)(prob_true, prob_pred)
+            return masked_prob_loss(prob_mask)(prob_true, prob_pred)
 
         def split_dist_true_mask(dist_true_mask):
             return tf.split(dist_true_mask, num_or_size_splits=[self.config.n_rays,1], axis=-1)
