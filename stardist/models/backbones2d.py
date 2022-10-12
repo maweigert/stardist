@@ -8,6 +8,8 @@ K = keras_import('backend')
 Input, Conv2D, MaxPooling2D, UpSampling2D = keras_import('layers', 'Input', 'Conv2D', 'MaxPooling2D', 'UpSampling2D')
 Model = keras_import('models', 'Model')
 
+from ._convnext import UnetConvNext 
+
 def get_backbone2d(input_img, config):
     """ 
     return features prob, dist, probclass
@@ -82,6 +84,11 @@ def get_backbone2d(input_img, config):
         _inp_channel = config.unet_n_filter_base if max(config.grid)>1 else 1
         backbone = segmentation_models.FPN('densenet121', encoder_weights=None, input_shape=(None,None,_inp_channel), 
                             pyramid_block_filters=128, classes=256, activation="linear")(pooled_img)        
+    elif config.backbone == "convnext":
+        pooled_img = _pool_grid(input_img)
+        _inp_channel = config.unet_n_filter_base if max(config.grid)>1 else 1
+        # dummy clall such that internal libs are imported 
+        backbone = UnetConvNext(input_shape=(None,None, _inp_channel), classes=128, activation='linear')(pooled_img)
     else: 
         raise KeyError(config.backbone)
 
