@@ -8,7 +8,9 @@ K = keras_import('backend')
 Input, Conv2D, MaxPooling2D, UpSampling2D = keras_import('layers', 'Input', 'Conv2D', 'MaxPooling2D', 'UpSampling2D')
 Model = keras_import('models', 'Model')
 
-from ._convnext import UnetConvNext 
+from .backbones._convnext import UnetConvNext 
+from .backbones._unet import unet_block
+from .backbones._msrf import msrf
 
 def get_backbone2d(input_img, config):
     """ 
@@ -41,7 +43,32 @@ def get_backbone2d(input_img, config):
         pooled_img = _pool_grid(pooled_img)
         backbone = unet_block(**unet_kwargs)(pooled_img)
         backbone = UpSampling2D(global_pool)(backbone)
-        # backbone = Conv2D(256, 3, padding='same', activation='linear')(backbone)
+        
+    elif config.backbone == "seunet":
+        unet_kwargs = {k[len('unet_'):]:v for (k,v) in vars(config).items() if k.startswith('unet_')}
+        pooled_img = _pool_grid(input_img)
+        backbone = unet_block(squeeze_excite = True, **unet_kwargs)(pooled_img)
+
+    elif config.backbone == "seunetv2":
+        unet_kwargs = {k[len('unet_'):]:v for (k,v) in vars(config).items() if k.startswith('unet_')}
+        unet_kwargs['expansion'] =  1.5
+        global_pool = 2 
+        pooled_img = Conv2D(config.unet_n_filter_base, 5 ,strides=(global_pool, global_pool),
+                                padding='same', activation=config.unet_activation)(input_img)
+        pooled_img = _pool_grid(pooled_img)
+        backbone = unet_block(squeeze_excite = True, **unet_kwargs)(pooled_img)
+        backbone = UpSampling2D(global_pool)(backbone)
+
+    elif config.backbone == "msrf":
+        unet_kwargs = {k[len('unet_'):]:v for (k,v) in vars(config).items() if k.startswith('unet_')}
+        global_pool = 2 
+        pooled_img = Conv2D(config.unet_n_filter_base, 5 ,strides=(global_pool, global_pool),
+                                padding='same', activation=config.unet_activation)(input_img)
+        pooled_img = _pool_grid(pooled_img)
+        backbone = msrf(input_size=(None,None,config.unet_n_filter_base))(pooled_img)
+        backbone = UpSampling2D(global_pool)(backbone)
+    
+
     elif config.backbone == "regnetx":
         pooled_img = _pool_grid(input_img)
         _inp_channel = config.unet_n_filter_base if max(config.grid)>1 else 1

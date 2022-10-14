@@ -338,7 +338,7 @@ class StarDist2D(StarDistBase):
             return Model(base.inputs, [output_prob,output_dist,output_prob_class])
 
         elif self.config.backbone=='regnetx':
-            from ._regnet import UnetDecoderRegnetx, RegNetX002, RegNetX001
+            from .backbones._regnet import UnetDecoderRegnetx, RegNetX002, RegNetX001
 
             base = RegNetX001(input_shape=(None,None,1), norm='ln',  include_top=False, stem_strides=1)
 
