@@ -316,8 +316,8 @@ class StarDist2D(StarDistBase):
 
 
     def _build(self):
-        input_img = Input(self.config.net_input_shape, name='input')
-
+        # input_img = Input(self.config.net_input_shape, name='input')
+        input_img = Input((None,None, self.config.n_channel_in), name='input')
 
         if self.config.backbone=='fpn':
             import tensorflow as tf 
