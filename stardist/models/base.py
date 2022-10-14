@@ -1085,7 +1085,7 @@ class StarDistBase(BaseModel):
         # TODO: good enough?
         from scipy.ndimage import zoom
         if img_size is None:
-            img_size = tuple(g*(128 if self.config.n_dim==2 else 64) for g in self.config.grid)
+            img_size = tuple(g*(512 if self.config.n_dim==2 else 64) for g in self.config.grid)
         if np.isscalar(img_size):
             img_size = (img_size,) * self.config.n_dim
         img_size = tuple(img_size)

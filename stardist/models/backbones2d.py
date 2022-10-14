@@ -7,6 +7,7 @@ keras = keras_import()
 K = keras_import('backend')
 Input, Conv2D, MaxPooling2D, UpSampling2D = keras_import('layers', 'Input', 'Conv2D', 'MaxPooling2D', 'UpSampling2D')
 Model = keras_import('models', 'Model')
+from ._attunet import AttentionUnet
 
 from .backbones._convnext import UnetConvNext 
 from .backbones._unet import unet_block
@@ -69,6 +70,18 @@ def get_backbone2d(input_img, config):
         backbone = UpSampling2D(global_pool)(backbone)
     
 
+        # backbone = Conv2D(256, 3, padding='same', activation='linear')(backbone)
+    elif config.backbone == "attunet":
+        global_pool = 2 
+        pooled_img = Conv2D(config.unet_n_filter_base, 5 ,strides=(global_pool, global_pool),
+                                padding='same', activation=config.unet_activation)(input_img)
+        pooled_img = _pool_grid(pooled_img)
+        _inp_channel = config.unet_n_filter_base if max(config.grid)>1 else 1
+        backbone = AttentionUnet(dim=config.unet_n_filter_base, 
+                        in_channels = _inp_channel, out_channels=config.unet_n_filter_base,
+                        dim_mults=(1, 2, 3, 4, 5), full_attention=False, use_convtranspose=False)(pooled_img)
+        backbone = UpSampling2D(global_pool)(backbone)
+        
     elif config.backbone == "regnetx":
         pooled_img = _pool_grid(input_img)
         _inp_channel = config.unet_n_filter_base if max(config.grid)>1 else 1
@@ -124,9 +137,7 @@ def get_backbone2d(input_img, config):
 if __name__ == "__main__":
     from stardist.models import Config2D, StarDist2D
 
-    # conf = Config2D(backbone='fpn_resnext50', n_classes=1)
-    conf = Config2D(backbone='fpn_densenet121', n_classes=1)
-    # conf = Config2D(backbone='fpn_seresnet18', n_classes=1)
+    conf = Config2D(backbone='convnext', n_classes=1)
     model = StarDist2D(conf, None,None)
 
     model.keras_model.summary()
