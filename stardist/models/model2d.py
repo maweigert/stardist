@@ -53,12 +53,20 @@ class StarDistData2D(StarDistDataBase):
 
         if self.ignore_border:
             print(f'ignoring border')
+            
+
 
     def __getitem__(self, i):
         idx = self.batch(i)
+        if self.Y[0].ndim==2:
+            return self._getitem_single_channel(idx)
+        else: 
+            return self._getitem_multi_channel(idx)
+        
+    def _getitem_single_channel(self, idx):
         arrays = [sample_patches((self.Y[k],) + self.channels_as_tuple(self.X[k]),
-                                 patch_size=self.patch_size, n_samples=1,
-                                 valid_inds=self.get_valid_inds(k)) for k in idx]
+                                patch_size=self.patch_size, n_samples=1,
+                                valid_inds=self.get_valid_inds(k)) for k in idx]
 
         if self.n_channel is None:
             X, Y = list(zip(*[(x[0][self.b],y[0]) for y,x in arrays]))
@@ -66,7 +74,7 @@ class StarDistData2D(StarDistDataBase):
             X, Y = list(zip(*[(np.stack([_x[0] for _x in x],axis=-1)[self.b], y[0]) for y,*x in arrays]))
 
         X, Y = tuple(zip(*tuple(self.augmenter(_x, _y) for _x, _y in zip(X,Y))))
-
+    
         if self.shape_completion:
             Y_cleared = [clear_border(lbl) for lbl in Y]
             _dist     = np.stack([star_dist(lbl,self.n_rays,mode=self.sd_mode)[self.b+(slice(None),)] for lbl in Y_cleared])
@@ -92,7 +100,7 @@ class StarDistData2D(StarDistDataBase):
             prob_mask *= 1-np.stack([_border_mask(lbl[self.b][self.ss_grid[1:3]]) for lbl in Y]) 
             
         prob_mask = np.expand_dims(prob_mask,-1)
-
+        
         X = np.stack(X)
         if X.ndim == 3: # input image has no channel axis
             X = np.expand_dims(X,-1)
@@ -116,6 +124,86 @@ class StarDistData2D(StarDistDataBase):
             return [X], [prob_and_mask,dist_and_mask]
         else:
             prob_class = np.stack(tuple((mask_to_categorical(y, self.n_classes, self.classes[k]) for y,k in zip(Y, idx))))
+
+            # TODO: investigate downsampling via simple indexing vs. using 'zoom'
+            # prob_class = prob_class[self.ss_grid]
+            # 'zoom' might lead to better registered maps (especially if upscaled later)
+            prob_class = zoom(prob_class, (1,)+tuple(1/g for g in self.grid)+(1,), order=0)
+
+            return [X], [prob_and_mask,dist_and_mask, prob_class]
+
+
+    def _getitem_multi_channel(self, idx):
+        arrays = [sample_patches(self.channels_as_tuple(self.Y[k]) + self.channels_as_tuple(self.X[k]),
+                                 patch_size=self.patch_size, n_samples=1,
+                                 valid_inds=self.get_valid_inds(k)) for k in idx]
+
+
+
+        
+        if self.n_channel is None:
+            X, Y = list(zip(*[(x[0][self.b],y[0]) for y,x in arrays]))
+        else:
+            X, Y = list(zip(*[(np.stack([_x[0] for _x in x],axis=-1)[self.b], y[0]) for y,*x in arrays]))
+
+        # put first channel of X back to Y 
+        Y = tuple(np.concatenate((_y[...,None],_x[...,:1]),axis=-1).astype(np.int32) for _x, _y in zip(X,Y))
+        X = tuple(_x[...,1:] for _x in X)
+        
+        X, Y = tuple(zip(*tuple(self.augmenter(_x, _y) for _x, _y in zip(X,Y))))
+    
+        Y_prob = tuple(_y[...,0] for _y in Y)
+        Y_mask = tuple(_y[...,1] for _y in Y) 
+        
+        if self.shape_completion:
+            Y_cleared = [clear_border(lbl) for lbl in Y_mask]
+            _dist     = np.stack([star_dist(lbl,self.n_rays,mode=self.sd_mode)[self.b+(slice(None),)] for lbl in Y_cleared])
+            dist      = _dist[self.ss_grid]
+            dist_mask = np.stack([edt_prob(lbl[self.b][self.ss_grid[1:3]]) for lbl in Y_cleared])
+            raise NotImplementedError('fix flow prob first!')
+        else:
+            # directly subsample with grid
+            dist      = np.stack([star_dist(lbl,self.n_rays,mode=self.sd_mode, grid=self.grid, mask_border_dist=self.ignore_border) for lbl in Y_mask])
+            dist_mask = np.stack([(lbl[self.ss_grid[1:3]]>0).astype(np.float32) for lbl in Y_mask])
+            dist_mask = np.expand_dims(dist_mask, -1)
+        if self.prob_mode=='edt':
+            prob      = np.stack([edt_prob(lbl[self.b][self.ss_grid[1:3]]) for lbl in Y_prob])
+        elif self.prob_mode=='flow':
+            prob      = np.stack([_flow_prob_edt(_lbl[self.ss_grid[1:3]], _dist) for _lbl, _dist in zip(Y_prob, dist)])
+        elif self.prob_mode=='centroid':
+            prob      = np.stack([_centroid_prob_edt(_lbl[self.ss_grid[1:3]]) for _lbl, _dist in zip(Y_prob, dist)])
+        else: 
+            raise ValueError(f'unknown prob mode {self.prob_mode} !')
+
+        prob_mask = np.ones_like(prob)
+        if self.ignore_border:
+            prob_mask *= 1-np.stack([_border_mask(lbl[self.b][self.ss_grid[1:3]]) for lbl in Y_mask]) 
+            
+        prob_mask = np.expand_dims(prob_mask,-1)
+        
+        X = np.stack(X)
+        if X.ndim == 3: # input image has no channel axis
+            X = np.expand_dims(X,-1)
+        prob = np.expand_dims(prob,-1)
+
+        # subsample wth given grid
+        # dist_mask = dist_mask[self.ss_grid]
+        # prob      = prob[self.ss_grid]
+
+        # append dist_mask to dist as additional channel
+        # dist_and_mask = np.concatenate([dist,dist_mask],axis=-1)
+        # faster than concatenate
+        dist_and_mask = np.empty(dist.shape[:-1]+(self.n_rays+1,), np.float32)
+        dist_and_mask[...,:self.n_rays] = dist
+        dist_and_mask[...,self.n_rays:] = dist_mask
+
+        prob_and_mask = np.concatenate((prob, prob_mask), axis=-1)
+    
+
+        if self.n_classes is None:
+            return [X], [prob_and_mask,dist_and_mask]
+        else:
+            prob_class = np.stack(tuple((mask_to_categorical(y, self.n_classes, self.classes[k]) for y,k in zip(Y_mask, idx))))
 
             # TODO: investigate downsampling via simple indexing vs. using 'zoom'
             # prob_class = prob_class[self.ss_grid]
@@ -257,7 +345,8 @@ class Config2D(BaseConfig):
         self.train_n_val_patches       = None
         self.train_tensorboard         = True
         # the parameter 'min_delta' was called 'epsilon' for keras<=2.1.5
-        min_delta_key = 'epsilon' if LooseVersion(keras.__version__)<=LooseVersion('2.1.5') else 'min_delta'
+        # min_delta_key = 'epsilon' if LooseVersion(keras.__version__)<=LooseVersion('2.1.5') else 'min_delta'
+        min_delta_key = 'min_delta'
         self.train_reduce_lr           = {'factor': 0.5, 'patience': 40, min_delta_key: 0}
 
         self.use_gpu                   = False

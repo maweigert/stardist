@@ -171,7 +171,7 @@ class StarDistDataBase(RollingSequence):
 
         if isinstance(X, (np.ndarray, tuple, list)) and \
            isinstance(Y, (np.ndarray, tuple, list)):
-            all(y.ndim==nD and x.ndim==x_ndim and x.shape[:nD]==y.shape for x,y in zip(X,Y)) or _raise(ValueError("images and masks should have corresponding shapes/dimensions"))
+            all(x.shape[:nD]==y.shape[:nD] for x,y in zip(X,Y)) or _raise(ValueError("images and masks should have corresponding shapes/dimensions"))
             all(x.shape[:nD]>=tuple(patch_size) for x in X) or _raise(ValueError("Some images are too small for given patch_size {patch_size}".format(patch_size=patch_size)))
 
         if x_ndim == nD:
@@ -219,8 +219,11 @@ class StarDistDataBase(RollingSequence):
         if k in _ind_cache:
             inds = _ind_cache[k]
         else:
+            y = self.Y[k] 
+            if y.ndim==3:
+                y = y[...,0]
             patch_filter = (lambda y,p: self.max_filter(y, self.maxfilter_patch_size) > 0) if foreground_only else None
-            inds = get_valid_inds(self.Y[k], self.patch_size, patch_filter=patch_filter)
+            inds = get_valid_inds(y, self.patch_size, patch_filter=patch_filter)
             if self.sample_ind_cache:
                 with self.lock:
                     _ind_cache[k] = inds
@@ -399,7 +402,6 @@ class StarDistBase(BaseModel):
             ValueError("all values of n_tiles must be integer values >= 1"))
 
         n_tiles = tuple(map(int,n_tiles))
-
         axes     = self._normalize_axes(img, axes)
         axes_net = self.config.axes
 
@@ -1095,8 +1097,8 @@ class StarDistBase(BaseModel):
         x = np.zeros((1,)+img_size+(self.config.n_channel_in,), dtype=np.float32)
         z = np.zeros_like(x)
         x[(0,)+mid+(slice(None),)] = 1
-        y  = self.keras_model.predict(x)[0][0,...,0]
-        y0 = self.keras_model.predict(z)[0][0,...,0]
+        y  = self.keras_model.predict(x, verbose=False)[0][0,...,0]
+        y0 = self.keras_model.predict(z, verbose=False)[0][0,...,0]
         grid = tuple((np.array(x.shape[1:-1])/np.array(y.shape)).astype(int))
         assert grid == self.config.grid
         y  = zoom(y, grid,order=0)

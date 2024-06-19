@@ -469,6 +469,6 @@ def _border_mask(y):
         idx.extend(np.unique(y[-1]).tolist())
         y = np.moveaxis(y,0,-1)
     idx = set(idx)-{0}
-    mask = np.zeros(y.shape, np.bool)
+    mask = np.zeros(y.shape, bool)
     mask[np.isin(y, tuple(idx))] = True
     return mask
