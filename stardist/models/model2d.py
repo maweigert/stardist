@@ -119,6 +119,7 @@ class StarDistData2D(StarDistDataBase):
 
         prob_and_mask = np.concatenate((prob, prob_mask), axis=-1)
     
+        breakpoint()
 
         if self.n_classes is None:
             return [X], [prob_and_mask,dist_and_mask]

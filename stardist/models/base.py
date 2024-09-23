@@ -426,6 +426,7 @@ class StarDistBase(BaseModel):
             warnings.warn("Predicting on non-float input... ( forgot to normalize? )")
 
         def predict_direct(x):
+            predict_kwargs['verbose'] = False
             ys = self.keras_model.predict(x[np.newaxis], **predict_kwargs)
             return tuple(y[0] for y in ys)
 
