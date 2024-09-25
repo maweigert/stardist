@@ -7,11 +7,11 @@ from tqdm import tqdm
 
 from csbdeep.models import BaseConfig
 from csbdeep.utils import _raise, backend_channels_last, axes_check_and_normalize, axes_dict
-from csbdeep.utils.tf import keras_import, IS_TF_1, CARETensorBoard, CARETensorBoardImage
+from csbdeep.utils.tf import keras_import, IS_TF_1, CARETensorBoard, CARETensorBoardImage, IS_KERAS_3_PLUS, BACKEND as K
 from skimage.segmentation import clear_border
 from skimage.measure import regionprops
 from scipy.ndimage import zoom
-from distutils.version import LooseVersion
+from packaging.version import Version
 
 import tensorflow as tf
 keras = keras_import()
@@ -26,6 +26,8 @@ from ..utils import edt_prob, _normalize_grid, mask_to_categorical, _flow_prob_e
 from ..geometry import star_dist, dist_to_coord, polygons_to_label
 from ..nms import non_maximum_suppression, non_maximum_suppression_sparse
 from .backbones2d import get_backbone2d
+
+_gen_rtype = list if IS_TF_1 else tuple
 
 class StarDistData2D(StarDistDataBase):
 
@@ -43,6 +45,8 @@ class StarDistData2D(StarDistDataBase):
 
         self.shape_completion = bool(shape_completion)
         if self.shape_completion and b > 0:
+            if not all(b % g == 0 for g in self.grid):
+                raise ValueError(f"'shape_completion' requires that crop size {b} ('train_completion_crop' in config) is evenly divisible by all grid values {self.grid}")
             self.b = slice(b,-b),slice(b,-b)
         else:
             self.b = slice(None),slice(None)
@@ -74,7 +78,18 @@ class StarDistData2D(StarDistDataBase):
             X, Y = list(zip(*[(np.stack([_x[0] for _x in x],axis=-1)[self.b], y[0]) for y,*x in arrays]))
 
         X, Y = tuple(zip(*tuple(self.augmenter(_x, _y) for _x, _y in zip(X,Y))))
-    
+
+        mask_neg_labels = tuple(y[self.b][self.ss_grid[1:3]] < 0 for y in Y)
+        has_neg_labels = any(m.any() for m in mask_neg_labels)
+        if has_neg_labels:
+            mask_neg_labels = np.stack(mask_neg_labels)
+            # set negative label pixels to 0 (background)
+            Y = tuple(np.maximum(y, 0) for y in Y)
+
+        prob = np.stack([edt_prob(lbl[self.b][self.ss_grid[1:3]]) for lbl in Y])
+        # prob = np.stack([edt_prob(lbl[self.b]) for lbl in Y])
+        # prob = prob[self.ss_grid]
+
         if self.shape_completion:
             Y_cleared = [clear_border(lbl) for lbl in Y]
             _dist     = np.stack([star_dist(lbl,self.n_rays,mode=self.sd_mode)[self.b+(slice(None),)] for lbl in Y_cleared])
@@ -114,102 +129,27 @@ class StarDistData2D(StarDistDataBase):
         # dist_and_mask = np.concatenate([dist,dist_mask],axis=-1)
         # faster than concatenate
         dist_and_mask = np.empty(dist.shape[:-1]+(self.n_rays+1,), np.float32)
-        dist_and_mask[...,:self.n_rays] = dist
-        dist_and_mask[...,self.n_rays:] = dist_mask
+        dist_and_mask[...,:-1] = dist
+        dist_and_mask[...,-1:] = dist_mask
 
-        prob_and_mask = np.concatenate((prob, prob_mask), axis=-1)
-    
+        if has_neg_labels:
+            prob[mask_neg_labels] = -1  # set to -1 to disable loss
+
+        # note: must return tuples in keras 3 (cf. https://stackoverflow.com/a/78158487)
         if self.n_classes is None:
-            return [X], [prob_and_mask,dist_and_mask]
+            return _gen_rtype((X,)), _gen_rtype((prob,dist_and_mask))
         else:
-            prob_class = np.stack(tuple((mask_to_categorical(y, self.n_classes, self.classes[k]) for y,k in zip(Y, idx))))
+            prob_class = np.stack(tuple((mask_to_categorical(y[self.b], self.n_classes, self.classes[k]) for y,k in zip(Y, idx))))
 
             # TODO: investigate downsampling via simple indexing vs. using 'zoom'
             # prob_class = prob_class[self.ss_grid]
             # 'zoom' might lead to better registered maps (especially if upscaled later)
             prob_class = zoom(prob_class, (1,)+tuple(1/g for g in self.grid)+(1,), order=0)
 
-            return [X], [prob_and_mask,dist_and_mask, prob_class]
+            if has_neg_labels:
+                prob_class[mask_neg_labels] = -1  # set to -1 to disable loss
 
-
-    def _getitem_multi_channel(self, idx):
-        arrays = [sample_patches(self.channels_as_tuple(self.Y[k]) + self.channels_as_tuple(self.X[k]),
-                                 patch_size=self.patch_size, n_samples=1,
-                                 valid_inds=self.get_valid_inds(k)) for k in idx]
-
-
-
-        
-        if self.n_channel is None:
-            X, Y = list(zip(*[(x[0][self.b],y[0]) for y,x in arrays]))
-        else:
-            X, Y = list(zip(*[(np.stack([_x[0] for _x in x],axis=-1)[self.b], y[0]) for y,*x in arrays]))
-
-        # put first channel of X back to Y 
-        Y = tuple(np.concatenate((_y[...,None],_x[...,:1]),axis=-1).astype(np.int32) for _x, _y in zip(X,Y))
-        X = tuple(_x[...,1:] for _x in X)
-        
-        X, Y = tuple(zip(*tuple(self.augmenter(_x, _y) for _x, _y in zip(X,Y))))
-    
-        Y_prob = tuple(_y[...,0] for _y in Y)
-        Y_mask = tuple(_y[...,1] for _y in Y) 
-        
-        if self.shape_completion:
-            Y_cleared = [clear_border(lbl) for lbl in Y_mask]
-            _dist     = np.stack([star_dist(lbl,self.n_rays,mode=self.sd_mode)[self.b+(slice(None),)] for lbl in Y_cleared])
-            dist      = _dist[self.ss_grid]
-            dist_mask = np.stack([edt_prob(lbl[self.b][self.ss_grid[1:3]]) for lbl in Y_cleared])
-            raise NotImplementedError('fix flow prob first!')
-        else:
-            # directly subsample with grid
-            dist      = np.stack([star_dist(lbl,self.n_rays,mode=self.sd_mode, grid=self.grid, mask_border_dist=self.ignore_border) for lbl in Y_mask])
-            dist_mask = np.stack([(lbl[self.ss_grid[1:3]]>0).astype(np.float32) for lbl in Y_mask])
-            dist_mask = np.expand_dims(dist_mask, -1)
-        if self.prob_mode=='edt':
-            prob      = np.stack([edt_prob(lbl[self.b][self.ss_grid[1:3]]) for lbl in Y_prob])
-        elif self.prob_mode=='flow':
-            prob      = np.stack([_flow_prob_edt(_lbl[self.ss_grid[1:3]], _dist) for _lbl, _dist in zip(Y_prob, dist)])
-        elif self.prob_mode=='centroid':
-            prob      = np.stack([_centroid_prob_edt(_lbl[self.ss_grid[1:3]]) for _lbl, _dist in zip(Y_prob, dist)])
-        else: 
-            raise ValueError(f'unknown prob mode {self.prob_mode} !')
-
-        prob_mask = np.ones_like(prob)
-        if self.ignore_border:
-            prob_mask *= 1-np.stack([_border_mask(lbl[self.b][self.ss_grid[1:3]]) for lbl in Y_mask]) 
-            
-        prob_mask = np.expand_dims(prob_mask,-1)
-        
-        X = np.stack(X)
-        if X.ndim == 3: # input image has no channel axis
-            X = np.expand_dims(X,-1)
-        prob = np.expand_dims(prob,-1)
-
-        # subsample wth given grid
-        # dist_mask = dist_mask[self.ss_grid]
-        # prob      = prob[self.ss_grid]
-
-        # append dist_mask to dist as additional channel
-        # dist_and_mask = np.concatenate([dist,dist_mask],axis=-1)
-        # faster than concatenate
-        dist_and_mask = np.empty(dist.shape[:-1]+(self.n_rays+1,), np.float32)
-        dist_and_mask[...,:self.n_rays] = dist
-        dist_and_mask[...,self.n_rays:] = dist_mask
-
-        prob_and_mask = np.concatenate((prob, prob_mask), axis=-1)
-    
-
-        if self.n_classes is None:
-            return [X], [prob_and_mask,dist_and_mask]
-        else:
-            prob_class = np.stack(tuple((mask_to_categorical(y, self.n_classes, self.classes[k]) for y,k in zip(Y_mask, idx))))
-
-            # TODO: investigate downsampling via simple indexing vs. using 'zoom'
-            # prob_class = prob_class[self.ss_grid]
-            # 'zoom' might lead to better registered maps (especially if upscaled later)
-            prob_class = zoom(prob_class, (1,)+tuple(1/g for g in self.grid)+(1,), order=0)
-
-            return [X], [prob_and_mask,dist_and_mask, prob_class]
+            return _gen_rtype((X,)), _gen_rtype((prob,dist_and_mask, prob_class))
 
 
 
@@ -229,7 +169,7 @@ class Config2D(BaseConfig):
         Subsampling factors (must be powers of 2) for each of the axes.
         Model will predict on a subsampled grid for increased efficiency and larger field of view.
     n_classes : None or int
-        Number of object classes to use for multi-class predection (use None to disable)
+        Number of object classes to use for multi-class prediction (use None to disable)
     backbone : str
         Name of the neural network architecture to be used as backbone.
     kwargs : dict
@@ -344,8 +284,8 @@ class Config2D(BaseConfig):
         self.train_n_val_patches       = None
         self.train_tensorboard         = True
         # the parameter 'min_delta' was called 'epsilon' for keras<=2.1.5
-        # min_delta_key = 'epsilon' if LooseVersion(keras.__version__)<=LooseVersion('2.1.5') else 'min_delta'
-        min_delta_key = 'min_delta'
+        # keras.__version__ was removed in tensorflow 2.13.0
+        min_delta_key = 'epsilon' if Version(getattr(keras, '__version__', '9.9.9'))<=Version('2.1.5') else 'min_delta'
         self.train_reduce_lr           = {'factor': 0.5, 'patience': 40, min_delta_key: 0}
 
         self.use_gpu                   = False
@@ -488,6 +428,8 @@ class StarDist2D(StarDistBase):
             Input images
         Y : tuple, list, `numpy.ndarray`, `keras.utils.Sequence`
             Label masks
+            Positive pixel values denote object instance ids (0 for background).
+            Negative values can be used to turn off all losses for the corresponding pixels (e.g. for regions that haven't been labeled).
         classes (optional): 'auto' or iterable of same length as X
              label id -> class id mapping for each label mask of Y if multiclass prediction is activated (n_classes > 0)
              list of dicts with label id -> class id (1,...,n_classes)
@@ -561,6 +503,12 @@ class StarDist2D(StarDistBase):
             prob_mode        = self.config.train_prob_mode,
             ignore_border    = self.config.train_ignore_border
         )
+        worker_kwargs = dict(workers=workers, use_multiprocessing=workers>1)
+        if IS_KERAS_3_PLUS:
+            data_kwargs['keras_kwargs'] = worker_kwargs
+            fit_kwargs = {}
+        else:
+            fit_kwargs = worker_kwargs
 
         # generate validation data and store in numpy arrays
         n_data_val = len(validation_data[0])
@@ -605,9 +553,10 @@ class StarDist2D(StarDistBase):
                 self.callbacks.append(CARETensorBoardImage(model=self.keras_model, data=data_val, log_dir=str(self.logdir/'logs'/'images'),
                                                            n_images=3, prob_out=False, output_slices=output_slices))
 
-        fit = self.keras_model.fit_generator if IS_TF_1 else self.keras_model.fit
+        fit = self.keras_model.fit_generator if (IS_TF_1 and not IS_KERAS_3_PLUS) else self.keras_model.fit
         history = fit(iter(self.data_train), validation_data=data_val,
                       epochs=epochs, steps_per_epoch=steps_per_epoch,
+                      **fit_kwargs,
                       callbacks=self.callbacks, verbose=1,
                       # set validation batchsize to training batchsize (only works for tf >= 2.2)
                       **(dict(validation_batch_size = self.config.train_batch_size) if _tf_version_at_least("2.2.0") else {}))
@@ -671,7 +620,7 @@ class StarDist2D(StarDistBase):
         if scale is not None:
             # need to undo the scaling given by the scale dict, e.g. scale = dict(X=0.5,Y=0.5):
             #   1. re-scale points (origins of polygons)
-            #   2. re-scale coordinates (computed from distances) of (zero-origin) polygons 
+            #   2. re-scale coordinates (computed from distances) of (zero-origin) polygons
             if not (isinstance(scale,dict) and 'X' in scale and 'Y' in scale):
                 raise ValueError("scale must be a dictionary with entries for 'X' and 'Y'")
             rescale = (1/scale['Y'],1/scale['X'])

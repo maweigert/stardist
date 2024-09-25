@@ -3,14 +3,15 @@
 [![Test](https://github.com/stardist/stardist/workflows/Test/badge.svg)](https://github.com/stardist/stardist/actions?query=workflow%3ATest)
 [![Test (PyPI)](https://github.com/stardist/stardist/workflows/Test%20(PyPI)/badge.svg)](https://github.com/stardist/stardist/actions?query=workflow%3A%22Test+%28PyPI%29%22)
 [![Image.sc forum](https://img.shields.io/badge/dynamic/json.svg?label=forum&url=https%3A%2F%2Fforum.image.sc%2Ftags%2Fstardist.json&query=%24.topic_list.tags.0.topic_count&colorB=brightgreen&suffix=%20topics&logo=data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAA4AAAAOCAYAAAAfSC3RAAABPklEQVR42m3SyyqFURTA8Y2BER0TDyExZ+aSPIKUlPIITFzKeQWXwhBlQrmFgUzMMFLKZeguBu5y+//17dP3nc5vuPdee6299gohUYYaDGOyyACq4JmQVoFujOMR77hNfOAGM+hBOQqB9TjHD36xhAa04RCuuXeKOvwHVWIKL9jCK2bRiV284QgL8MwEjAneeo9VNOEaBhzALGtoRy02cIcWhE34jj5YxgW+E5Z4iTPkMYpPLCNY3hdOYEfNbKYdmNngZ1jyEzw7h7AIb3fRTQ95OAZ6yQpGYHMMtOTgouktYwxuXsHgWLLl+4x++Kx1FJrjLTagA77bTPvYgw1rRqY56e+w7GNYsqX6JfPwi7aR+Y5SA+BXtKIRfkfJAYgj14tpOF6+I46c4/cAM3UhM3JxyKsxiOIhH0IO6SH/A1Kb1WBeUjbkAAAAAElFTkSuQmCC)](https://forum.image.sc/tags/stardist)
+[![PyPI - Downloads](https://img.shields.io/pypi/dm/stardist)](https://pypistats.org/packages/stardist)
 
 # *StarDist* - Object Detection with Star-convex Shapes
 
-![](https://github.com/stardist/stardist/raw/master/images/stardist_overview.png)
+![](https://github.com/stardist/stardist/raw/main/images/stardist_overview.png)
 
 This repository contains the Python implementation of star-convex object detection for 2D and 3D images, as described in the papers:
 
-<img src="https://github.com/stardist/stardist/raw/master/images/stardist_logo.jpg" title="siân is the king of the universe" width="25%" align="right">
+<img src="https://github.com/stardist/stardist/raw/main/images/stardist_logo.jpg" title="siân is the king of the universe" width="25%" align="right">
 
 - Uwe Schmidt, Martin Weigert, Coleman Broaddus, and Gene Myers.  
 [*Cell Detection with Star-convex Polygons*](https://arxiv.org/abs/1806.03535).  
@@ -18,7 +19,11 @@ International Conference on Medical Image Computing and Computer-Assisted Interv
 
 - Martin Weigert, Uwe Schmidt, Robert Haase, Ko Sugawara, and Gene Myers.  
 [*Star-convex Polyhedra for 3D Object Detection and Segmentation in Microscopy*](http://openaccess.thecvf.com/content_WACV_2020/papers/Weigert_Star-convex_Polyhedra_for_3D_Object_Detection_and_Segmentation_in_Microscopy_WACV_2020_paper.pdf).  
-The IEEE Winter Conference on Applications of Computer Vision (WACV), Snowmass Village, Colorado, March 2020
+The IEEE Winter Conference on Applications of Computer Vision (WACV), Snowmass Village, Colorado, March 2020.
+
+- Martin Weigert and Uwe Schmidt.  
+[*Nuclei Instance Segmentation and Classification in Histopathology Images with Stardist*](https://arxiv.org/abs/2203.02284).  
+The IEEE International Symposium on Biomedical Imaging Challenges (ISBIC), Kolkata, India, March 2022.
 
 Please [cite the paper(s)](#how-to-cite) if you are using this code in your research.
 
@@ -28,11 +33,11 @@ Please [cite the paper(s)](#how-to-cite) if you are using this code in your rese
 The following figure illustrates the general approach for 2D images. The training data consists of corresponding pairs of input (i.e. raw) images and fully annotated label images (i.e. every pixel is labeled with a unique object id or 0 for background).
 A model is trained to densely predict the distances (r) to the object boundary along a fixed set of rays and object probabilities (d), which together produce an overcomplete set of candidate polygons for a given input image. The final result is obtained via non-maximum suppression (NMS) of these candidates.
 
-![](https://github.com/stardist/stardist/raw/master/images/overview_2d.png)
+![](https://github.com/stardist/stardist/raw/main/images/overview_2d.png)
 
 The approach for 3D volumes is similar to the one described for 2D, using pairs of input and fully annotated label volumes as training data.
 
-![](https://github.com/stardist/stardist/raw/master/images/overview_3d.png)
+![](https://github.com/stardist/stardist/raw/main/images/overview_3d.png)
 
 ## Webinar/Tutorial
 
@@ -43,7 +48,7 @@ If you want to know more about the concepts and practical applications of StarDi
 
 ## Installation
 
-This package is compatible with Python 3.6 - 3.10.
+This package is compatible with Python 3.6 - 3.12.
 
 If you only want to use a StarDist plugin for a GUI-based software, please read [this](#plugins-for-other-software).
 
@@ -51,7 +56,7 @@ If you only want to use a StarDist plugin for a GUI-based software, please read 
 (either TensorFlow 1 or 2) by following the official instructions.
 For [GPU support](https://www.tensorflow.org/install/gpu), it is very
 important to install the specific versions of CUDA and cuDNN that are
-compatible with the respective version of TensorFlow. (If you need help and can use `conda`, take a look at [this](https://github.com/CSBDeep/CSBDeep/tree/master/extras#conda-environment).)
+compatible with the respective version of TensorFlow. (If you need help and can use `conda`, take a look at [this](https://github.com/CSBDeep/CSBDeep/tree/main/extras#conda-environment).)
 
 2. *StarDist* can then be installed with `pip`:
 
@@ -75,9 +80,9 @@ compatible with the respective version of TensorFlow. (If you need help and can 
 
 ## Usage
 
-We provide example workflows for 2D and 3D via Jupyter [notebooks](https://github.com/stardist/stardist/tree/master/examples) that illustrate how this package can be used.
+We provide example workflows for 2D and 3D via Jupyter [notebooks](https://github.com/stardist/stardist/tree/main/examples) that illustrate how this package can be used.
 
-![](https://github.com/stardist/stardist/raw/master/images/example_steps.png)
+![](https://github.com/stardist/stardist/raw/main/images/example_steps.png)
 
 ### Pretrained Models for 2D
 
@@ -86,8 +91,8 @@ Currently we provide some pretrained models in 2D that might already be suitable
 
 | key | Modality (Staining) | Image format | Example Image    | Description  |
 | :-- | :-: | :-:| :-:| :-- |
-| `2D_versatile_fluo` `2D_paper_dsb2018`| Fluorescence (nuclear marker) | 2D single channel| <img src="https://github.com/stardist/stardist/raw/master/images/example_fluo.jpg" title="example image fluo" width="120px" align="center">       | *Versatile (fluorescent nuclei)* and *DSB 2018 (from StarDist 2D paper)* that were both trained on a [subset of the DSB 2018 nuclei segmentation challenge dataset](https://github.com/stardist/stardist/releases/download/0.1.0/dsb2018.zip). |
-|`2D_versatile_he` | Brightfield (H&E) | 2D RGB  | <img src="https://github.com/stardist/stardist/raw/master/images/example_histo.jpg" title="example image histo" width="120px" align="center">       | *Versatile (H&E nuclei)* that was trained on images from the [MoNuSeg 2018 training data](https://monuseg.grand-challenge.org/Data/) and the [TNBC dataset from Naylor et al. (2018)](https://zenodo.org/record/1175282#.X6mwG9so-CN). |
+| `2D_versatile_fluo` `2D_paper_dsb2018`| Fluorescence (nuclear marker) | 2D single channel| <img src="https://github.com/stardist/stardist/raw/main/images/example_fluo.jpg" title="example image fluo" width="120px" align="center">       | *Versatile (fluorescent nuclei)* and *DSB 2018 (from StarDist 2D paper)* that were both trained on a [subset of the DSB 2018 nuclei segmentation challenge dataset](https://github.com/stardist/stardist/releases/download/0.1.0/dsb2018.zip). |
+|`2D_versatile_he` | Brightfield (H&E) | 2D RGB  | <img src="https://github.com/stardist/stardist/raw/main/images/example_histo.jpg" title="example image histo" width="120px" align="center">       | *Versatile (H&E nuclei)* that was trained on images from the [MoNuSeg 2018 training data](https://monuseg.grand-challenge.org/Data/) and the [TNBC dataset from Naylor et al. (2018)](https://zenodo.org/record/1175282#.X6mwG9so-CN). |
 
 
 You can access these pretrained models from `stardist.models.StarDist2D`
@@ -138,12 +143,12 @@ Although each of these provide decent annotation tools, we currently recommend u
 #### Annotating with LabKit (2D or 3D)
 
 1. Install [Fiji](https://fiji.sc) and the [Labkit](https://imagej.net/Labkit) plugin
-2. Open the (2D or 3D) image and start Labkit via `Plugins > Segmentation > Labkit`
+2. Open the (2D or 3D) image and start Labkit via `Plugins > Labkit > Open Current Image With Labkit`
 3. Successively add a new label and annotate a single cell instance with the brush tool until *all* cells are labeled.  
    (Always disable `allow overlapping labels` or – in older versions of LabKit – enable the `override` option.) 
-4. Export the label image via `Save Labeling...` and `File format > TIF Image`
+4. Export the label image via `Labeling > Save Labeling ...` with `Files of Type > TIF Image` making sure that the file name ends with `.tif` or `.tiff`.
 
-![](https://github.com/stardist/stardist/raw/master/images/labkit_2d_labkit.png)
+![](https://github.com/stardist/stardist/raw/main/images/labkit_2d_labkit.png)
 
 
 Additional tips:
@@ -156,20 +161,20 @@ Additional tips:
 1. Install [QuPath](https://qupath.github.io/)
 2. Create a new project (`File -> Project...-> Create project`) and add your raw images
 3. Annotate nuclei/objects
-4. Run [this script](https://raw.githubusercontent.com/stardist/stardist/master/extras/qupath_export_annotations.groovy) to export the annotations (save the script and drag it on QuPath. Then execute it with `Run for project`). The script will create a `ground_truth` folder within your QuPath project that includes both the `images` and `masks` subfolder that then can directly be used with *StarDist*.
+4. Run [this script](https://raw.githubusercontent.com/stardist/stardist/main/extras/qupath_export_annotations.groovy) to export the annotations (save the script and drag it on QuPath. Then execute it with `Run for project`). The script will create a `ground_truth` folder within your QuPath project that includes both the `images` and `masks` subfolder that then can directly be used with *StarDist*.
 
-To see how this could be done, have a look at the following [example QuPath project](https://raw.githubusercontent.com/stardist/stardist/master/extras/qupath_example_project.zip) (data courtesy of Romain Guiet, EPFL).
+To see how this could be done, have a look at the following [example QuPath project](https://raw.githubusercontent.com/stardist/stardist/main/extras/qupath_example_project.zip) (data courtesy of Romain Guiet, EPFL).
 
-![](https://github.com/stardist/stardist/raw/master/images/qupath.png)
+![](https://github.com/stardist/stardist/raw/main/images/qupath.png)
 
 
 ### Multi-class Prediction
 
 StarDist also supports multi-class prediction, i.e. each found object instance can additionally be classified into a fixed number of discrete object classes (e.g. cell types):
 
-![](https://github.com/stardist/stardist/raw/master/images/stardist_multiclass.png)
+![](https://github.com/stardist/stardist/raw/main/images/stardist_multiclass.png)
 
-Please see the [multi-class example notebook](https://nbviewer.jupyter.org/github/stardist/stardist/blob/master/examples/other2D/multiclass.ipynb) if you're interested in this.
+Please see the [multi-class example notebook](https://nbviewer.jupyter.org/github/stardist/stardist/blob/main/examples/other2D/multiclass.ipynb) if you're interested in this.
 
 ## Instance segmentation metrics
 
@@ -240,16 +245,30 @@ If available, the C++ code will make use of [OpenMP](https://en.wikipedia.org/wi
 #### macOS
 The default C/C++ compiler Clang that comes with the macOS command line tools (installed via `xcode-select --install`) does not support OpenMP out of the box, but it can be added. Alternatively, a suitable compiler can be installed from [conda-forge](https://conda-forge.org). Please see this [detailed guide](https://scikit-learn.org/stable/developers/advanced_installation.html#macos)  for more information on both strategies (although written for [scikit-image](https://scikit-learn.org), it also applies here).
 
-A third alternative (and what we did until StarDist 0.8.1) is to install the OpenMP-enabled GCC compiler via [Homebrew](https://brew.sh) with `brew install gcc` (e.g. installing `gcc-10`/`g++-10` or newer). After that, you can build the package like this (adjust compiler names/paths as necessary):
+A third alternative (and what we did until StarDist 0.8.1) is to install the OpenMP-enabled GCC compiler via [Homebrew](https://brew.sh) with `brew install gcc` (e.g. installing `gcc-12`/`g++-12` or newer). After that, you can build the package like this (adjust compiler names/paths as necessary):
 
-    CC=gcc-10 CXX=g++-10 pip install stardist
+    CC=gcc-12 CXX=g++-12 pip install stardist
 
 If you use `conda` on macOS and after `import stardist` see errors similar to `Symbol not found: _GOMP_loop_nonmonotonic_dynamic_next`, please see [this issue](https://github.com/stardist/stardist/issues/19#issuecomment-535610758) for a temporary workaround.
 
+If you encounter an `ImportError: dlopen(...): symbol not found in flat namespace ...` error on `import stardist`, you may try to install it like so:
+
+```
+brew install libomp
+
+export HOMEBREW_PREFIX=/opt/homebrew #set to your homebrew prefix
+export CPPFLAGS="$CPPFLAGS -Xpreprocessor -fopenmp"
+export CFLAGS="$CFLAGS -I/usr/local/opt/libomp/include"
+export CXXFLAGS="$CXXFLAGS -I/usr/local/opt/libomp/include"
+export LDFLAGS="$LDFLAGS -Wl,-rpath,/usr/local/opt/libomp/lib -L/usr/local/opt/libomp/lib -lomp"
+
+pip install stardist --no-binary :all:
+```
+
 ##### Apple Silicon
 
-As of StarDist 0.8.2, we provide `arm64` wheels that should work with macOS on Apple M1. 
-We recommend setting up an `arm64` `conda` environment with GPU-accelerated TensorFlow following [Apple's instructions](https://developer.apple.com/metal/tensorflow-plugin/) using [conda-forge miniforge3 or mambaforge](https://github.com/conda-forge/miniforge). Then install `stardist` using `pip`.
+As of StarDist 0.8.2, we provide `arm64` wheels that should work with [macOS on Apple Silicon](https://support.apple.com/en-us/HT211814) (M1 chip or newer). 
+We recommend setting up an `arm64` `conda` environment with GPU-accelerated TensorFlow following [Apple's instructions](https://developer.apple.com/metal/tensorflow-plugin/) (ensure you are using macOS 12 Monterey or newer) using [conda-forge miniforge3 or mambaforge](https://github.com/conda-forge/miniforge). Then install `stardist` using `pip`.
 ```
 conda create -y -n stardist-env python=3.9   
 conda activate stardist-env
@@ -273,7 +292,7 @@ We made a plugin for the Python-based multi-dimensional image viewer [napari](ht
 
 ### QuPath
 
-Inspired by the Fiji plugin, [Pete Bankhead](https://github.com/petebankhead) made a custom implementation of StarDist 2D for [QuPath](https://qupath.github.io) to use pretrained models. Please see [this page](https://qupath.readthedocs.io/en/latest/docs/advanced/stardist.html) for documentation and installation instructions.
+Inspired by the Fiji plugin, [Pete Bankhead](https://github.com/petebankhead) made a custom implementation of StarDist 2D for [QuPath](https://qupath.github.io) to use pretrained models. Please see [this page](https://qupath.readthedocs.io/en/latest/docs/deep/stardist.html) for documentation and installation instructions.
 
 ### Icy
 
@@ -302,5 +321,13 @@ Based on the Fiji plugin, [Deborah Schmidt](https://github.com/frauzufall) made 
   month     = {March},
   year      = {2020},
   doi       = {10.1109/WACV45572.2020.9093435}
+}
+
+@inproceedings{weigert2022,
+  author    = {Martin Weigert and Uwe Schmidt},
+  title     = {Nuclei Instance Segmentation and Classification in Histopathology Images with Stardist},
+  booktitle = {The IEEE International Symposium on Biomedical Imaging Challenges (ISBIC)},
+  year      = {2022},
+  doi       = {10.1109/ISBIC56247.2022.9854534}
 }
 ```

@@ -1,9 +1,14 @@
 from __future__ import absolute_import, print_function
 from setuptools import setup, find_packages, Extension
 from setuptools.command.build_ext import build_ext
-from numpy.distutils.misc_util import get_numpy_include_dirs
+from numpy import get_include
 from os import path
 from glob import glob
+
+
+def get_numpy_include_dirs():
+    return [get_include()]
+
 
 class build_ext_openmp(build_ext):
     # https://www.openmp.org/resources/openmp-compilers-tools/
@@ -55,9 +60,14 @@ class build_ext_openmp(build_ext):
 
 #------------------------------------------------------------------------------------
 
+# https://stackoverflow.com/a/22866630
+# python setup.py sdist                    ->  __file__ is relative path
+# python /absolute/path/to/setup.py sdist  ->  __file__ is absolute path
+# python -m build --sdist                  ->  __file__ is absolute path
 
 # cf. https://github.com/mkleehammer/pyodbc/issues/82#issuecomment-231561240
-_dir = path.dirname(__file__)
+# _dir = path.dirname(__file__)
+_dir = '' #  assumption: Path(__file__).parent == Path.cwd()
 
 with open(path.join(_dir,'stardist','version.py'), encoding="utf-8") as f:
     exec(f.read())
@@ -122,18 +132,23 @@ setup(
         'Programming Language :: Python :: 3.8',
         'Programming Language :: Python :: 3.9',
         'Programming Language :: Python :: 3.10',
+        'Programming Language :: Python :: 3.11',
+        'Programming Language :: Python :: 3.12',
     ],
 
     install_requires=[
-        'csbdeep>=0.6.3',
+        'csbdeep>=0.8.0',
         'scikit-image',
         'numba',
         'imageio',
     ],
 
     extras_require={
-        "tf1":  ["csbdeep[tf1]>=0.6.3"],
-        "test": ["pytest"],
+        "tf1":  ["csbdeep[tf1]>=0.8.0"],
+        "test": [
+            "pytest;        python_version< '3.7'",
+            "pytest>=7.2.0; python_version>='3.7'",
+         ],
         "bioimageio": ["bioimageio.core>=0.5.0","importlib-metadata"],
     },
 
