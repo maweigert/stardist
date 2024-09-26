@@ -640,9 +640,11 @@ static PyObject *c_starflow2d_map(PyObject *self, PyObject *args)
 
     int verbose, rounds, preserve_labels;
     float delta;
+    float atol;
+    float delta_mag;
 
-    if (!PyArg_ParseTuple(args, "O!O!O!fiii", &PyArray_Type, &flow, &PyArray_Type, &labels, &PyArray_Type, &mask, 
-                          &delta, &rounds, &preserve_labels, &verbose))
+    if (!PyArg_ParseTuple(args, "O!O!O!fiiif", &PyArray_Type, &flow, &PyArray_Type, &labels, &PyArray_Type, &mask, 
+                          &delta, &rounds, &preserve_labels, &verbose, &atol))
         return NULL;
 
     npy_intp *dims = PyArray_DIMS(flow);
@@ -687,17 +689,22 @@ static PyObject *c_starflow2d_map(PyObject *self, PyObject *args)
                     int i2 = clip(int(y), 0, dims[0] - 1);
                     int j2 = clip(int(x), 0, dims[1] - 1);
 
-                    const float dx = *(float *)PyArray_GETPTR3(flow, i2, j2, 0);
-                    const float dy = *(float *)PyArray_GETPTR3(flow, i2, j2, 1);
+                    const float dy = *(float *)PyArray_GETPTR3(flow, i2, j2, 0);
+                    const float dx = *(float *)PyArray_GETPTR3(flow, i2, j2, 1);
                 
-                    y += delta * dx;
-                    x += delta * dy;
+                    y += delta * dy;
+                    x += delta * dx;
+                    delta_mag = delta*sqrt(dx*dx+dy*dy);
                 }
 
                 int i2 = clip(int(y), 0, dims[0] - 1);
                 int j2 = clip(int(x), 0, dims[1] - 1);
 
-                *(int *)PyArray_GETPTR2(dst, i, j) = *(int *)PyArray_GETPTR2(labels, i2,j2 );
+                int new_label = 0;
+                if (delta_mag<atol)
+                    new_label = *(int *)PyArray_GETPTR2(labels, i2,j2 );
+
+                *(int *)PyArray_GETPTR2(dst, i, j) = new_label;
 
             
             }

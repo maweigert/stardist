@@ -1,20 +1,48 @@
 from __future__ import print_function, unicode_literals, absolute_import, division
 import numpy as np
 from time import time
+import warnings
+from skimage.feature import peak_local_max
+
 from .utils import _normalize_grid
+
+def _nonborder_mask(shape:tuple[int], b:tuple[int]=None):
+    """ return boolean mask that is True at interior and False at image border given by b 
+    b can be:
+    - None (returns zero mask) 
+    - scalar (returns that scalar border, -1 for no border)
+    - a list of [(left, right)]*ndim  (with -1 for no border)
+    """
+    ind = np.zeros(shape, bool)
+    if b is not None and np.isscalar(b):
+        b = ((b,b),)*len(shape)
+    if b is not None:
+        ss = tuple(slice(_bs[0] if _bs[0]>0 else None,
+                         -_bs[1] if _bs[1]>0 else None)  for _bs in b)
+        ind[ss] = True
+    else: 
+        ind[:] = True
+    return ind
+    
 
 def _ind_prob_thresh(prob, prob_thresh, b=2):
     if b is not None and np.isscalar(b):
         b = ((b,b),)*prob.ndim
 
     ind_thresh = prob > prob_thresh
-    if b is not None:
-        _ind_thresh = np.zeros_like(ind_thresh)
-        ss = tuple(slice(_bs[0] if _bs[0]>0 else None,
-                         -_bs[1] if _bs[1]>0 else None)  for _bs in b)
-        _ind_thresh[ss] = True
-        ind_thresh &= _ind_thresh
+    nonborder = _nonborder_mask(prob.shape, b)
+    ind_thresh &= nonborder
     return ind_thresh
+
+
+def _ind_prob_thresh_peaks(prob:np.ndarray, prob_thresh:float, b:tuple[int]):
+    inds = np.zeros(prob.shape, dtype=bool)
+    idx = peak_local_max(prob, threshold_abs=prob_thresh)
+    inds[tuple(idx.T)] = True
+    nonborder = _nonborder_mask(inds.shape, b)
+    inds &= nonborder
+    return inds
+
 
 
 def _non_maximum_suppression_old(coord, prob, grid=(1,1), b=2, nms_thresh=0.5, prob_thresh=0.5, verbose=False, max_bbox_search=True):
@@ -75,6 +103,7 @@ def _non_maximum_suppression_old(coord, prob, grid=(1,1), b=2, nms_thresh=0.5, p
 
 
 def non_maximum_suppression(dist, prob, grid=(1,1), b=2, nms_thresh=0.5, prob_thresh=0.5,
+                            use_peaks:bool=False,
                             use_bbox=True, use_kdtree=True, verbose=False):
     """Non-Maximum-Supression of 2D polygons
 
@@ -104,7 +133,11 @@ def non_maximum_suppression(dist, prob, grid=(1,1), b=2, nms_thresh=0.5, prob_th
     #     _mask[b:-b,b:-b] = True
     #     mask &= _mask
 
-    mask = _ind_prob_thresh(prob, prob_thresh, b)
+    if use_peaks:
+        mask = _ind_prob_thresh_peaks(prob, prob_thresh, b)
+    else:
+        mask = _ind_prob_thresh(prob, prob_thresh, b)
+        
     points = np.stack(np.where(mask), axis=1)
 
     dist   = dist[mask]

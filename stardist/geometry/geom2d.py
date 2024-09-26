@@ -15,12 +15,14 @@ from ..utils import path_absolute, _is_power_of_2, _normalize_grid
 
 
 
-def starflow2d_map(flow, labels, mask = None, delta=.1, rounds=1, preserve_labels:bool = False, verbose=False):
+def starflow2d_map(flow, labels, mask = None, delta=.1, rounds=1, preserve_labels:bool = False, verbose=False, atol:float=None):
+    if atol is None: 
+        atol = 1e23
     if mask is None:
         mask = np.ones(labels.shape, np.int32)
     else:
         mask = mask.astype(np.int32)
-    return c_starflow2d_map(flow.astype(np.float32), labels.astype(np.int32), mask, np.float32(delta), np.int32(rounds), np.int32(preserve_labels), np.int32(verbose))
+    return c_starflow2d_map(flow.astype(np.float32), labels.astype(np.int32), mask, np.float32(delta), np.int32(rounds), np.int32(preserve_labels), np.int32(verbose), np.float32(atol))
 
 def starflow2d_map_float32(flow, arr, mask = None, delta=.1, rounds=1, verbose=False):
     if mask is None:

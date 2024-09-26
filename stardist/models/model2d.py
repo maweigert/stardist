@@ -591,7 +591,10 @@ class StarDist2D(StarDistBase):
     #     return labels, res_dict
 
 
-    def _instances_from_prediction(self, img_shape, prob, dist, points=None, prob_class=None, prob_thresh=None, nms_thresh=None, overlap_label=None, return_labels=True, scale=None, **nms_kwargs):
+    def _instances_from_prediction(self, img_shape, prob, dist, points=None, prob_class=None, 
+                                   use_peaks:bool=False,
+                                   prob_thresh=None, nms_thresh=None, overlap_label=None, 
+                                   return_labels=True, scale=None, **nms_kwargs):
         """
         if points is None     -> dense prediction
         if points is not None -> sparse prediction
@@ -612,6 +615,7 @@ class StarDist2D(StarDistBase):
         # dense prediction
         else:
             points, probi, disti = non_maximum_suppression(dist, prob, grid=self.config.grid,
+                                                           use_peaks=use_peaks,
                                                            prob_thresh=prob_thresh, nms_thresh=nms_thresh, **nms_kwargs)
             if prob_class is not None:
                 inds = tuple(p//g for p,g in zip(points.T, self.config.grid))

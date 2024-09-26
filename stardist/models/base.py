@@ -11,7 +11,6 @@ import threading
 import functools
 import scipy.ndimage as ndi
 import numbers
-
 from csbdeep.models.base_model import BaseModel
 from csbdeep.utils.tf import export_SavedModel, keras_import, IS_TF_1, CARETensorBoard, BACKEND as K
 
@@ -26,7 +25,7 @@ from csbdeep.internals.train import RollingSequence
 from csbdeep.data import Resizer
 
 from ..sample_patches import get_valid_inds
-from ..nms import _ind_prob_thresh
+from ..nms import _ind_prob_thresh, _ind_prob_thresh_peaks
 from ..utils import _is_power_of_2,  _is_floatarray, optimize_threshold, grid_divisible_patch_size
 
 # TODO: helper function to check if receptive field of cnn is sufficient for object sizes in GT
@@ -562,7 +561,10 @@ class StarDistBase(BaseModel):
         return r
 
 
-    def _predict_sparse_generator(self, img, prob_thresh=None, axes=None, normalizer=None, n_tiles=None, show_tile_progress=True, b=2, **predict_kwargs):
+    def _predict_sparse_generator(self, img, prob_thresh=None, axes=None, 
+                                  use_peaks:bool = False,
+                                  normalizer=None, n_tiles=None, show_tile_progress=True, 
+                                  b=2, **predict_kwargs):
         """ Sparse version of model.predict()
         Returns
         -------
@@ -601,15 +603,28 @@ class StarDistBase(BaseModel):
                 s_dst[channel] = slice(None)
                 s_src, s_dst = tuple(s_src), tuple(s_dst)
 
-                prob_tile, dist_tile = results_tile[:2]
-                prob_tile, dist_tile = _prep(prob_tile[s_src], dist_tile[s_src])
 
                 bs = list((b if s.start==0 else -1, b if s.stop==_sh else -1) for s,_sh in zip(s_dst, sh))
                 bs.pop(channel)
-                inds   = _ind_prob_thresh(prob_tile, prob_thresh, b=bs)
+    
+                prob_tile, dist_tile = results_tile[:2]
+
+                if use_peaks: 
+                    inds = _ind_prob_thresh_peaks(np.take(prob_tile, 0,axis=channel), prob_thresh, b=bs)
+                    inds = inds[tuple(s for i,s in enumerate(s_src) if i!=channel)]
+                    prob_tile, dist_tile = _prep(prob_tile[s_src], dist_tile[s_src])
+                    
+                    
+                else:
+                    prob_tile, dist_tile = _prep(prob_tile[s_src], dist_tile[s_src])
+                    inds = _ind_prob_thresh(prob_tile, prob_thresh, b=bs)
+                    
+                
+
                 proba.extend(prob_tile[inds].copy())
                 dista.extend(dist_tile[inds].copy())
                 _points = np.stack(np.where(inds), axis=1)
+                    
                 offset = list(s.start for i,s in enumerate(s_dst))
                 offset.pop(channel)
                 _points = _points + np.array(offset).reshape((1,len(offset)))
@@ -628,6 +643,13 @@ class StarDistBase(BaseModel):
             prob, dist = results[:2]
             prob, dist = _prep(prob, dist)
             inds   = _ind_prob_thresh(prob, prob_thresh, b=b)
+            
+            if use_peaks: 
+                inds = _ind_prob_thresh_peaks(prob, prob_thresh, b=b)
+            else:
+                inds = _ind_prob_thresh(prob, prob_thresh, b=b)
+                
+            
             proba = prob[inds].copy()
             dista = dist[inds].copy()
             _points = np.stack(np.where(inds), axis=1)
@@ -637,11 +659,10 @@ class StarDistBase(BaseModel):
                 p = np.moveaxis(results[2],channel,-1)
                 prob_classa = p[inds].copy()
 
-
         proba = np.asarray(proba)
         dista = np.asarray(dista).reshape((-1,self.config.n_rays))
         pointsa = np.asarray(pointsa).reshape((-1,self.config.n_dim))
-
+        
         idx = resizer.filter_points(x.ndim, pointsa, axes_net)
         proba = proba[idx]
         dista = dista[idx]
@@ -672,6 +693,7 @@ class StarDistBase(BaseModel):
                                      scale=None,
                                      n_tiles=None, show_tile_progress=True,
                                      verbose=False,
+                                     use_peaks=False,
                                      return_labels=True,
                                      predict_kwargs=None, nms_kwargs=None,
                                      overlap_label=None, return_predict=False):
@@ -762,6 +784,7 @@ class StarDistBase(BaseModel):
         res = None
         if sparse:
             for res in self._predict_sparse_generator(img, axes=axes, normalizer=normalizer, n_tiles=n_tiles,
+                                                      use_peaks=use_peaks,
                                                       prob_thresh=prob_thresh, show_tile_progress=show_tile_progress, **predict_kwargs):
                 if res is None:
                     yield 'tile'  # yield 'tile' each time a tile has been processed
@@ -783,6 +806,7 @@ class StarDistBase(BaseModel):
                                                         points=points,
                                                         prob_class=prob_class,
                                                         prob_thresh=prob_thresh,
+                                                        use_peaks=use_peaks,
                                                         nms_thresh=nms_thresh,
                                                         scale=(None if scale is None else dict(zip(_axes,scale))),
                                                         return_labels=return_labels,
@@ -1237,5 +1261,5 @@ class StarDistPadAndCropResizer(Resizer):
 
 
 def _tf_version_at_least(version_string="1.0.0"):
-    from packaging import version
+    from packaging import version    
     return version.parse(tf.__version__) >= version.parse(version_string)
