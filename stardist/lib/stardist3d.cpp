@@ -2,6 +2,14 @@
 #include "numpy/arrayobject.h"
 #include "numpy/npy_math.h"
 #include "stardist3d_impl.h"
+#include <algorithm>
+
+
+inline int clip(int n, int lower, int upper)
+{
+    return std::max(lower, std::min(n, upper));
+}
+
 
 // dist.shape = (n_polys, n_rays)
 // points.shape = (n_polys, 3)
@@ -361,7 +369,9 @@ static PyObject *c_starflow3d(PyObject *self, PyObject *args)
     int verbose, rounds;
     float delta;
 
-    if (!PyArg_ParseTuple(args, "O!O!O!O!O!iii", &PyArray_Type, &dist, &PyArray_Type, &mask,   
+    if (!PyArg_ParseTuple(args, "O!O!O!O!O!iii", 
+                          &PyArray_Type, &dist, 
+                          &PyArray_Type, &mask,   
                           &PyArray_Type, &pz, 
                           &PyArray_Type, &py, 
                           &PyArray_Type, &px, 
@@ -378,6 +388,7 @@ static PyObject *c_starflow3d(PyObject *self, PyObject *args)
     dims_dst[3] = 3;
 
     printf("n_rays: %d\n", n_rays);
+    printf("grid_z: %d, grid_y: %d, grid_x: %d\n", grid_z, grid_y, grid_x);
 
     dst = (PyArrayObject *)PyArray_SimpleNew(4, dims_dst, NPY_FLOAT);
 
@@ -415,7 +426,7 @@ static PyObject *c_starflow3d(PyObject *self, PyObject *args)
                         const float ppx = *(float *)PyArray_GETPTR1(px, m);
                         const float r = *(float *)PyArray_GETPTR4(dist, i, j, k, m);
                         // weight by area which is proportional to r 
-                        const float weight = r;
+                        const float weight = r*r;
 
                         di += ppz * r * weight;
                         dj += ppy * r * weight;
@@ -424,12 +435,13 @@ static PyObject *c_starflow3d(PyObject *self, PyObject *args)
                         weight_sum += weight;
                     }
 
-                    di = di / weight_sum;
-                    dj = dj / weight_sum;
-                    dk = dk / weight_sum;
-                    *(float *)PyArray_GETPTR3(dst, i, j, 0) = di;
-                    *(float *)PyArray_GETPTR3(dst, i, j, 1) = dj;
-                    *(float *)PyArray_GETPTR3(dst, i, j, 2) = dk;
+                    di = di / (weight_sum + 1e-6);
+                    dj = dj / (weight_sum + 1e-6);
+                    dk = dk / (weight_sum + 1e-6);
+
+                    *(float *)PyArray_GETPTR4(dst, i, j, k, 0) = di*grid_z;
+                    *(float *)PyArray_GETPTR4(dst, i, j, k, 1) = dj*grid_y;
+                    *(float *)PyArray_GETPTR4(dst, i, j, k, 2) = dk*grid_x;
                 }
             }
         }
@@ -437,6 +449,100 @@ static PyObject *c_starflow3d(PyObject *self, PyObject *args)
     return PyArray_Return(dst);
 }
 
+
+
+static PyObject *c_starflow3d_map(PyObject *self, PyObject *args)
+{
+
+    PyArrayObject *flow = NULL;
+    PyArrayObject *mask = NULL;
+    PyArrayObject *labels = NULL;
+    PyArrayObject *dst = NULL;
+
+    int verbose, rounds, preserve_labels;
+    float delta;
+    float atol;
+    float delta_mag;
+
+    if (!PyArg_ParseTuple(args, "O!O!O!fiiif", &PyArray_Type, &flow, &PyArray_Type, &labels, &PyArray_Type, &mask, 
+                          &delta, &rounds, &preserve_labels, &verbose, &atol))
+        return NULL;
+
+    npy_intp *dims = PyArray_DIMS(flow);
+    npy_intp dims_dst[3];
+    dims_dst[0] = dims[0];
+    dims_dst[1] = dims[1];
+    dims_dst[2] = dims[2];
+    dst = (PyArrayObject *)PyArray_SimpleNew(3, dims_dst, NPY_INT32);
+
+#ifdef __APPLE__    
+#pragma omp parallel for 
+#else
+#pragma omp parallel for schedule(dynamic) 
+#endif
+    for (int i = 0; i < dims[0]; i++)
+    {
+        for (int j = 0; j < dims[1]; j++)
+        {
+            for (int k = 0; k < dims[2]; k++)
+            {
+
+                // *(int *)PyArray_GETPTR2(dst, i, j) = 0;
+
+                const int mask_value = *(int *)PyArray_GETPTR3(mask, i, j, k);
+                const int initial_label = *(int *)PyArray_GETPTR3(labels, i, j, k);
+
+                if ((preserve_labels) && (initial_label !=0)){
+                    *(int *)PyArray_GETPTR3(dst, i, j, k) = initial_label;
+                    continue;
+                }
+
+                if (mask_value == 0)
+                {
+                    *(int *)PyArray_GETPTR3(dst, i, j, k) = 0;
+                }
+                else
+                {
+                    float z = i;
+                    float y = j;
+                    float x = k;
+                    
+
+
+                    for (int n = 0; n < rounds; n++)
+                    {
+                        int i2 = clip(int(z), 0, dims[0] - 1);
+                        int j2 = clip(int(y), 0, dims[1] - 1);
+                        int k2 = clip(int(x), 0, dims[2] - 1);
+
+                        const float dz = *(float *)PyArray_GETPTR4(flow, i2, j2, k2, 0);
+                        const float dy = *(float *)PyArray_GETPTR4(flow, i2, j2, k2, 1);
+                        const float dx = *(float *)PyArray_GETPTR4(flow, i2, j2, k2, 2);
+                    
+                        z += delta * dz;
+                        y += delta * dy;
+                        x += delta * dx;
+                        delta_mag = delta*sqrt(dx*dx+dy*dy+dz*dz);
+                    }
+
+                    int i2 = clip(int(z), 0, dims[0] - 1);
+                    int j2 = clip(int(y), 0, dims[1] - 1);
+                    int k2 = clip(int(x), 0, dims[2] - 1);
+
+                    int new_label = 0;
+                    if (delta_mag<atol)
+                        new_label = *(int *)PyArray_GETPTR3(labels, i2,j2, k2);
+
+                    *(int *)PyArray_GETPTR3(dst, i, j, k) = new_label;
+
+                
+                }
+            }
+        }
+    }
+
+    return PyArray_Return(dst);
+}
 
 
 //------------------------------------------------------------------------
@@ -471,6 +577,11 @@ static struct PyMethodDef methods[] = {
                                         c_starflow3d,
                                         METH_VARARGS,
                                         "star flow 3d calculation"},
+
+                                       {"c_starflow3d_map",
+                                        c_starflow3d_map,
+                                        METH_VARARGS,
+                                        "star flow 3d map"},
 
                                        {NULL, NULL, 0, NULL}                                       
 };

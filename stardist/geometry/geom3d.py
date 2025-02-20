@@ -9,30 +9,45 @@ from tqdm import tqdm
 from ..utils import path_absolute, _normalize_grid
 from ..matching import _check_label_array
 # from ..lib.stardist3d import c_star_dist3d, c_polyhedron_to_label, c_dist_to_volume, c_dist_to_centroid
-from ..lib.stardist3d import c_star_dist3d, c_polyhedron_to_label, c_starflow3d
+from ..lib.stardist3d import c_star_dist3d, c_polyhedron_to_label, c_starflow3d, c_starflow3d_map
 
 
 
-
-def starflow3d_map(flow, labels, mask = None, delta=.1, rounds=1, preserve_labels:bool = False, verbose=False, atol:float=None):
-    if atol is None: 
-        atol = 1e23
-    if mask is None:
-        mask = np.ones(labels.shape, np.int32)
-    else:
-        mask = mask.astype(np.int32)
-    return c_starflow3d_map(flow.astype(np.float32), labels.astype(np.int32), mask, np.float32(delta), np.int32(rounds), np.int32(preserve_labels), np.int32(verbose), np.float32(atol))
 
 
 def starflow3d(dist:np.ndarray, mask:np.ndarray, rays, grid:tuple):
     dz, dy, dx = np.ascontiguousarray(rays.vertices.T)
     grid = _normalize_grid(grid,3)                    
     
-    return c_starflow3d(dist.astype(np.float32), mask.astype(np.int32), 
+    return c_starflow3d(dist.astype(np.float32), 
+                        mask.astype(np.int32), 
                         dz.astype(np.float32, copy=False), 
                         dy.astype(np.float32, copy=False), 
                         dx.astype(np.float32, copy=False), 
                         *tuple(int(a) for a in grid))
+
+
+
+def starflow3d_map(flow, labels, mask = None, delta=.1, rounds=1, preserve_labels:bool = False, verbose=False, atol:float=None):
+    if not flow.shape[:3] == labels.shape:
+        raise ValueError("flow and labels must have the same shape")
+    if mask is not None and not flow.shape[:3] == mask.shape:
+        raise ValueError("flow and mask must have the same shape")
+    
+    if atol is None: 
+        atol = 1e23
+    if mask is None:
+        mask = np.ones(labels.shape, np.int32)
+    else:
+        mask = mask.astype(np.int32)
+    return c_starflow3d_map(flow.astype(np.float32), 
+                            labels.astype(np.int32), 
+                            mask, 
+                            np.float32(delta), 
+                            np.int32(rounds), 
+                            np.int32(preserve_labels), 
+                            np.int32(verbose), 
+                            np.float32(atol))
 
 
 
