@@ -346,6 +346,99 @@ static PyObject* c_star_dist3d(PyObject *self, PyObject *args) {
 }
 
 
+
+static PyObject *c_starflow3d(PyObject *self, PyObject *args)
+{
+
+    PyArrayObject *dist = NULL;
+    PyArrayObject *mask = NULL;
+    PyArrayObject *dst = NULL;
+    PyArrayObject *pz = NULL;
+    PyArrayObject *py = NULL;
+    PyArrayObject *px = NULL;
+    int grid_z, grid_y, grid_x;
+
+    int verbose, rounds;
+    float delta;
+
+    if (!PyArg_ParseTuple(args, "O!O!O!O!O!iii", &PyArray_Type, &dist, &PyArray_Type, &mask,   
+                          &PyArray_Type, &pz, 
+                          &PyArray_Type, &py, 
+                          &PyArray_Type, &px, 
+                          &grid_z, &grid_y, &grid_x))
+        return NULL;
+
+    npy_intp *dims = PyArray_DIMS(dist);
+    const int n_rays = dims[3];
+
+    npy_intp dims_dst[4];
+    dims_dst[0] = dims[0];
+    dims_dst[1] = dims[1];
+    dims_dst[2] = dims[2];
+    dims_dst[3] = 3;
+
+    printf("n_rays: %d\n", n_rays);
+
+    dst = (PyArrayObject *)PyArray_SimpleNew(4, dims_dst, NPY_FLOAT);
+
+#ifdef __APPLE__    
+#pragma omp parallel for 
+#else
+#pragma omp parallel for schedule(dynamic) 
+#endif
+    for (int i = 0; i < dims[0]; i++)
+    {
+        for (int j = 0; j < dims[1]; j++)
+        {
+            for (int k = 0; k < dims[2]; k++)
+            {
+                const int value = *(int *)PyArray_GETPTR3(mask, i, j, k);
+                if (value == 0)
+                {
+                    *(float *)PyArray_GETPTR4(dst, i, j, k, 0) = 0;
+                    *(float *)PyArray_GETPTR4(dst, i, j, k, 1) = 0;
+                    *(float *)PyArray_GETPTR4(dst, i, j, k, 2) = 0;
+                }
+                else
+                {
+
+                    float weight_sum = 0;
+                    float di = 0;
+                    float dj = 0;
+                    float dk = 0;
+
+                    // compute distance to center of gravity of the polygon defined by dist
+                    for (int m = 0; m < n_rays; m++)
+                    {
+                        const float ppz = *(float *)PyArray_GETPTR1(pz, m);
+                        const float ppy = *(float *)PyArray_GETPTR1(py, m);
+                        const float ppx = *(float *)PyArray_GETPTR1(px, m);
+                        const float r = *(float *)PyArray_GETPTR4(dist, i, j, k, m);
+                        // weight by area which is proportional to r 
+                        const float weight = r;
+
+                        di += ppz * r * weight;
+                        dj += ppy * r * weight;
+                        dk += ppx * r * weight;
+
+                        weight_sum += weight;
+                    }
+
+                    di = di / weight_sum;
+                    dj = dj / weight_sum;
+                    dk = dk / weight_sum;
+                    *(float *)PyArray_GETPTR3(dst, i, j, 0) = di;
+                    *(float *)PyArray_GETPTR3(dst, i, j, 1) = dj;
+                    *(float *)PyArray_GETPTR3(dst, i, j, 2) = dk;
+                }
+            }
+        }
+    }
+    return PyArray_Return(dst);
+}
+
+
+
 //------------------------------------------------------------------------
 
 static struct PyMethodDef methods[] = {
@@ -373,6 +466,11 @@ static struct PyMethodDef methods[] = {
                                         c_dist_to_centroid,
                                         METH_VARARGS,
                                         "distance to centroids"},
+
+                                       {"c_starflow3d",
+                                        c_starflow3d,
+                                        METH_VARARGS,
+                                        "star flow 3d calculation"},
 
                                        {NULL, NULL, 0, NULL}                                       
 };
