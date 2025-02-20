@@ -5,12 +5,27 @@ import os
 from skimage.measure import regionprops
 from csbdeep.utils import _raise
 from tqdm import tqdm
+from skimage.feature.peak import (
+    _get_excluded_border_width,
+    _get_threshold,
+    _exclude_border,
+)
+
 
 from ..utils import path_absolute, _normalize_grid
 from ..matching import _check_label_array
 # from ..lib.stardist3d import c_star_dist3d, c_polyhedron_to_label, c_dist_to_volume, c_dist_to_centroid
 from ..lib.stardist3d import c_star_dist3d, c_polyhedron_to_label, c_starflow3d, c_starflow3d_map
+from ..lib.stardist3d import c_maximum_filter_3d_float
+from ..lib.point_nms3d import c_point_nms_3d
 
+
+def get_num_threads():
+    # set OMP_NUM_THREADS to 1/2 of the number of CPUs by default
+    n_cpu = os.cpu_count()
+    n_threads = int(os.environ.get("OMP_NUM_THREADS", n_cpu))
+    n_threads = max(1, min(n_threads, n_cpu // 2))
+    return n_threads
 
 
 
@@ -385,3 +400,103 @@ def export_to_obj_file3D(polys, fname=None, scale=1, single_mesh=True, uv_map=Fa
     return obj_str
 
 
+
+
+def nms_points_3d(
+    points: np.ndarray, scores: np.ndarray = None, min_distance: int = 2
+) -> np.ndarray:
+    """Non-maximum suppression for 2D points, choosing the highest scoring points while
+    ensuring that no two points are closer than min_distance.
+
+    Parameters
+    ----------
+    points : np.ndarray
+        Array of shape (N,2) containing the points to be filtered.
+    scores : np.ndarray
+        Array of shape (N,) containing scores for each point
+        If None, all points have the same score
+    min_distance : int, optional
+        Minimum distance between points, by default 2
+
+    Returns
+    -------
+    np.ndarray
+        Array of shape (N,) containing the indices of the points that survived the filtering.
+    """
+
+    points = np.asarray(points)
+    if not points.ndim == 2 and points.shape[1] == 3:
+        raise ValueError("points must be a array of shape (N,3)")
+    if scores is None:
+        scores = np.ones(len(points))
+    else:
+        scores = np.asarray(scores)
+    if not scores.ndim == 1:
+        raise ValueError("scores must be a array of shape (N,)")
+
+    idx = np.argsort(scores, kind="stable")[::-1]
+    points = points[idx]
+    scores = scores[idx]
+
+    points = np.ascontiguousarray(points, dtype=np.float32)
+    inds = c_point_nms_3d(points, np.float32(min_distance))
+    inds = idx[inds]
+    return inds
+
+
+def maximum_filter_3d(image: np.ndarray, kernel_size: int = 3) -> np.ndarray:
+    if not image.ndim == 3:
+        raise ValueError("Image must be 3D")
+    if not kernel_size > 0 and kernel_size % 2 == 1:
+        raise ValueError("kernel_size must be positive and odd")
+
+    image = np.ascontiguousarray(image, dtype=np.float32)
+    n_threads = get_num_threads()
+    return c_maximum_filter_3d_float(
+        image, np.int32(kernel_size // 2), np.int32(n_threads)
+    )
+
+def local_peaks3d(
+    image: np.ndarray,
+    min_distance=1,
+    exclude_border=True,
+    threshold_abs=None,
+    threshold_rel=None,
+    use_score:bool=False
+):
+    if not image.ndim ==3:
+        raise ValueError("Image must be 2D")
+    max_filter_fun = maximum_filter_2d if image.ndim == 2 else maximum_filter_3d
+    nms_fun = nms_points_2d if image.ndim == 2 else nms_points_3d
+
+    # make compatible with scikit-image
+    # https://github.com/scikit-image/scikit-image/blob/a4e533ea2a1947f13b88219e5f2c5931ab092413/skimage/feature/peak.py#L120
+    border_width = _get_excluded_border_width(image, min_distance, exclude_border)
+    threshold = _get_threshold(image, threshold_abs, threshold_rel)
+
+    image = image.astype(np.float32)
+
+    if min_distance <= 0:
+        mask = image > threshold
+    else:
+        mask = maximum_filter_3d(image, 2 * min_distance + 1) == image
+
+        # no peak for a trivial image
+        image_is_trivial = np.all(mask)
+        if image_is_trivial:
+            mask[:] = False
+        mask &= image > threshold
+
+    mask = _exclude_border(mask, border_width)
+
+    coord = np.nonzero(mask)
+    coord = np.stack(coord, axis=1)
+
+    if use_score:
+        scores = image[mask] if mask.sum() > 0 else None
+    else:
+        scores = None
+        
+    idx = nms_points_3d(coord, scores=scores, min_distance=min_distance)
+    coord = coord[idx].copy()
+    return coord

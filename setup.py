@@ -115,6 +115,12 @@ setup(
             extra_compile_args = ['-std=c++11'],
             include_dirs = get_numpy_include_dirs() + [qhull_root, nanoflann_root],
         ),
+        Extension(
+            'stardist.lib.point_nms3d',
+            sources = ['stardist/lib/point_nms3d.cpp'] + qhull_src,
+            extra_compile_args = ['-std=c++11'],
+            include_dirs = get_numpy_include_dirs() + [qhull_root, nanoflann_root],
+        ),
     ],
 
     package_data={'stardist': [ 'kernels/*.cl', 'data/images/*' ]},

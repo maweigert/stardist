@@ -21,7 +21,7 @@ from .base import StarDistBase, StarDistDataBase, _tf_version_at_least
 from ..sample_patches import sample_patches
 from ..utils import edt_prob, _normalize_grid, mask_to_categorical
 from ..matching import relabel_sequential
-from ..geometry import star_dist3D, polyhedron_to_label
+from ..geometry import star_dist3D, polyhedron_to_label, local_peaks3d
 from ..rays3d import Rays_GoldenSpiral, rays_from_json
 from ..nms import non_maximum_suppression_3d, non_maximum_suppression_3d_sparse
 
@@ -586,7 +586,9 @@ class StarDist3D(StarDistBase):
         return history
 
 
-    def _instances_from_prediction(self, img_shape, prob, dist, points=None, prob_class=None, prob_thresh=None, nms_thresh=None, overlap_label=None, return_labels=True, scale=None, **nms_kwargs):
+    def _instances_from_prediction(self, img_shape, prob, dist, points=None, prob_class=None, prob_thresh=None, nms_thresh=None, overlap_label=None, return_labels=True, scale=None,
+                                   use_peaks:bool=False,
+                                   **nms_kwargs):
         """
         if points is None     -> dense prediction
         if points is not None -> sparse prediction
@@ -599,6 +601,12 @@ class StarDist3D(StarDistBase):
 
         rays = rays_from_json(self.config.rays_json)
 
+        if points is None and use_peaks:
+            points = local_peaks3d(prob, min_distance=2)
+            dist = dist[tuple(points.T)]
+            prob = prob[tuple(points.T)]            
+            points = (np.array(self.config.grid)[None]*points)
+            
         # sparse prediction
         if points is not None:
             points, probi, disti, indsi = non_maximum_suppression_3d_sparse(dist, prob, points, rays, nms_thresh=nms_thresh, **nms_kwargs)
