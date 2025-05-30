@@ -20,7 +20,7 @@
 #include <stdarg.h>
 #include <stdexcept>
 #include <stdlib.h>
-
+#include <cstdio>
 
 extern "C" {
   void qh_exit(int exitcode);

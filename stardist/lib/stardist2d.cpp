@@ -403,7 +403,7 @@ static PyObject* c_non_max_suppression_inds_old(PyObject *self, PyObject *args) 
   
 static PyObject* c_non_max_suppression_inds(PyObject *self, PyObject *args) {
 
-  PyArrayObject *dist=NULL,*points_arr=NULL, *mapping=NULL, *result=NULL;
+  PyArrayObject *dist=NULL,*points_arr=NULL, *result=NULL;
   float threshold;
   int verbose, use_kdtree, use_bbox;
 
@@ -413,7 +413,7 @@ static PyObject* c_non_max_suppression_inds(PyObject *self, PyObject *args) {
 
   const float * const points = (float*) PyArray_DATA(points_arr);
   
-  npy_intp *img_dims = PyArray_DIMS(mapping);
+  npy_intp *img_dims = PyArray_DIMS(dist);
   const int height = img_dims[0], width = img_dims[1];
 
   npy_intp *dims = PyArray_DIMS(dist);

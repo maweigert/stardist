@@ -4,6 +4,10 @@
 #include "stardist3d_impl.h"
 #include <algorithm>
 
+#ifdef _OPENMP
+#include <omp.h>
+#endif
+
 
 inline int clip(int n, int lower, int upper)
 {
